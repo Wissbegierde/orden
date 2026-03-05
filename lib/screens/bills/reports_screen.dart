@@ -139,6 +139,17 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
     }
   }
 
+  String _formatAxisValue(double value) {
+    if (value == 0) return '0';
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(0)}K';
+    }
+    return value.toInt().toString();
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -258,64 +269,132 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
                     'Gastos por Período',
                     style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   SizedBox(
-                    height: 250,
-                    child: BarChart(
-                      BarChartData(
-                        alignment: BarChartAlignment.spaceAround,
-                        maxY:
-                            (chartData.fold(
-                                      0.0,
-                                      (max, group) =>
-                                          group.values.fold(
+                    height: 320,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16, bottom: 8),
+                      child: BarChart(
+                        BarChartData(
+                          alignment: BarChartAlignment.spaceAround,
+                          maxY:
+                              (chartData.fold(
+                                        0.0,
+                                        (max, group) =>
+                                            group.values.fold(
+                                                  0.0,
+                                                  (sum, v) => sum + v,
+                                                ) >
+                                                max
+                                            ? group.values.fold(
                                                 0.0,
                                                 (sum, v) => sum + v,
-                                              ) >
-                                              max
-                                          ? group.values.fold(
-                                              0.0,
-                                              (sum, v) => sum + v,
-                                            )
-                                          : max,
-                                    ) *
-                                    1.2)
-                                .toDouble(),
-                        barGroups: List.generate(
-                          chartData.length,
-                          (i) => BarChartGroupData(
-                            x: i,
-                            barRods: sortedCategories
-                                .map(
-                                  (catKey) => BarChartRodData(
-                                    toY: chartData[i][catKey] ?? 0,
-                                    color: _getCategoryColor(catKey),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                        titlesData: FlTitlesData(
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) => Text(
-                                labels[value.toInt()],
-                                style: const TextStyle(fontSize: 10),
-                              ),
+                                              )
+                                            : max,
+                                      ) *
+                                      1.2)
+                                  .toDouble(),
+                          barGroups: List.generate(
+                            chartData.length,
+                            (i) => BarChartGroupData(
+                              x: i,
+                              barRods: sortedCategories
+                                  .map(
+                                    (catKey) => BarChartRodData(
+                                      toY: chartData[i][catKey] ?? 0,
+                                      color: _getCategoryColor(catKey),
+                                      width: 12,
+                                    ),
+                                  )
+                                  .toList(),
                             ),
                           ),
-                          leftTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: true),
+                          titlesData: FlTitlesData(
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 40,
+                                getTitlesWidget: (value, meta) => Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    labels[value.toInt()],
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 70,
+                                getTitlesWidget: (value, meta) => Padding(
+                                  padding: const EdgeInsets.only(right: 12),
+                                  child: Text(
+                                    _formatAxisValue(value),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
                           ),
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
+                          gridData: const FlGridData(
+                            show: true,
+                            drawHorizontalLine: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: null,
                           ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
+                          borderData: FlBorderData(show: false),
                         ),
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Leyenda de categorías
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: sortedCategories
+                          .map(
+                            (catKey) => Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: _getCategoryColor(catKey),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _getCategoryLabel(catKey),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -325,18 +404,38 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
               'Desglose por Categoría',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
-            const SizedBox(height: 12),
-            Column(
-              children: sortedCategories
-                  .map(
-                    (catKey) => _CategoryBreakdown(
-                      categoryLabel: _getCategoryLabel(catKey),
-                      amount: byCategory[catKey] ?? 0,
-                      color: _getCategoryColor(catKey),
-                      total: totalGastos,
-                    ),
-                  )
-                  .toList(),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: sortedCategories
+                    .map(
+                      (catKey) => Column(
+                        children: [
+                          _CategoryBreakdown(
+                            categoryLabel: _getCategoryLabel(catKey),
+                            amount: byCategory[catKey] ?? 0,
+                            color: _getCategoryColor(catKey),
+                            total: totalGastos,
+                          ),
+                          if (catKey != sortedCategories.last)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Divider(
+                                height: 1,
+                                color: Colors.grey.shade200,
+                              ),
+                            ),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
             ),
           ],
         ),
@@ -419,7 +518,7 @@ class _CategoryBreakdown extends StatelessWidget {
     ).format(amount);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -430,29 +529,51 @@ class _CategoryBreakdown extends StatelessWidget {
                 categoryLabel,
                 style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E1B4B),
                 ),
               ),
               Text(
                 formatted,
-                style: TextStyle(fontWeight: FontWeight.w600, color: color),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: color,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: percentage / 100,
-              minHeight: 6,
+              minHeight: 8,
               backgroundColor: Colors.grey.shade300,
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${percentage.toStringAsFixed(1)}% del total',
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${percentage.toStringAsFixed(1)}% del total',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                '${(amount / 1000).toStringAsFixed(1)}K',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ],
       ),

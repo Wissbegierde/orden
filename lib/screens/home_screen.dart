@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/module_card.dart';
 import 'income/income_screen.dart';
+import 'bills/bills_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -83,7 +84,10 @@ class HomeScreen extends StatelessWidget {
                       icon: Icons.trending_down_rounded,
                       label: 'GASTOS',
                       color: const Color(0xFFEF4444),
-                      enabled: false,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const BillsScreen()),
+                      ),
                     ),
                     ModuleCard(
                       icon: Icons.inventory_2_rounded,

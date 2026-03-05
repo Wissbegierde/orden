@@ -4,6 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'providers/income_provider.dart';
+import 'providers/bills_provider.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
@@ -19,7 +20,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => IncomeProvider())],
+      providers: [
+        ChangeNotifierProvider(create: (_) => IncomeProvider()),
+        ChangeNotifierProvider(create: (_) => BillsProvider()),
+      ],
       child: MaterialApp(
         title: 'Orden',
         debugShowCheckedModeBanner: false,

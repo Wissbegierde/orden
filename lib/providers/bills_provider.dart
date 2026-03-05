@@ -12,87 +12,124 @@ class BillsProvider extends ChangeNotifier {
   String? get error => _error;
 
   // ── Gastos ────────────────────────────────────────────────────
+
   Stream<List<Bill>> billsStream() {
-    return _db
-        .collection('gastos')
-        .where('deletedAt', isNull: true) // Solo gastos no eliminados
-        .orderBy('date', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(Bill.fromFirestore).toList());
+    return _db.collection('gastos').snapshots().map((snap) {
+      final bills = snap.docs.map(Bill.fromFirestore).toList();
+
+      final activeBills = bills.where((bill) => !bill.isDeleted).toList();
+
+      // ordenar en memoria
+      activeBills.sort((a, b) => b.date.compareTo(a.date));
+
+      return activeBills;
+    });
   }
 
   Stream<List<Bill>> billsForDay(DateTime day) {
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
+
     return _db
         .collection('gastos')
-        .where('deletedAt', isNull: true) // Solo gastos no eliminados
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .where('date', isLessThan: Timestamp.fromDate(end))
-        .orderBy('date', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map(Bill.fromFirestore).toList());
+        .map((snap) {
+          final bills = snap.docs.map(Bill.fromFirestore).toList();
+
+          final activeBills = bills.where((bill) => !bill.isDeleted).toList();
+
+          activeBills.sort((a, b) => b.date.compareTo(a.date));
+
+          return activeBills;
+        });
   }
 
   Stream<List<Bill>> billsByCategory(BillCategory category) {
     return _db
         .collection('gastos')
-        .where('deletedAt', isNull: true) // Solo gastos no eliminados
         .where('category', isEqualTo: category.name)
-        .orderBy('date', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map(Bill.fromFirestore).toList());
+        .map((snap) {
+          final bills = snap.docs.map(Bill.fromFirestore).toList();
+
+          final activeBills = bills.where((bill) => !bill.isDeleted).toList();
+
+          activeBills.sort((a, b) => b.date.compareTo(a.date));
+
+          return activeBills;
+        });
   }
 
   Stream<List<Bill>> unpaidBills() {
     return _db
         .collection('gastos')
-        .where('deletedAt', isNull: true) // Solo gastos no eliminados
         .where('paid', isEqualTo: false)
-        .orderBy('date', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map(Bill.fromFirestore).toList());
+        .map((snap) {
+          final bills = snap.docs.map(Bill.fromFirestore).toList();
+
+          final activeBills = bills.where((bill) => !bill.isDeleted).toList();
+
+          activeBills.sort((a, b) => b.date.compareTo(a.date));
+
+          return activeBills;
+        });
   }
 
-  // Stream para gastos eliminados (para auditoría)
+  // ── Gastos eliminados (auditoría) ─────────────────────────────
+
   Stream<List<Bill>> deletedBillsStream() {
-    return _db
-        .collection('gastos')
-        .where('deletedAt', isNull: false) // Solo gastos eliminados
-        .orderBy('deletedAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(Bill.fromFirestore).toList());
+    return _db.collection('gastos').snapshots().map((snap) {
+      final bills = snap.docs.map(Bill.fromFirestore).toList();
+
+      final deletedBills = bills.where((bill) => bill.isDeleted).toList();
+
+      deletedBills.sort(
+        (a, b) => (b.deletedAt ?? DateTime(2000)).compareTo(
+          a.deletedAt ?? DateTime(2000),
+        ),
+      );
+
+      return deletedBills;
+    });
   }
+
+  // ── CRUD Gastos ───────────────────────────────────────────────
 
   Future<void> addBill(Bill bill) async {
     _loading = true;
     _error = null;
     notifyListeners();
+
     try {
       await _db.collection('gastos').add(bill.toFirestore());
     } catch (e) {
       _error = e.toString();
-    } finally {
-      _loading = false;
-      notifyListeners();
     }
+
+    _loading = false;
+    notifyListeners();
   }
 
   Future<void> updateBill(String billId, Bill bill) async {
     _loading = true;
     _error = null;
     notifyListeners();
+
     try {
       await _db.collection('gastos').doc(billId).update(bill.toFirestore());
     } catch (e) {
       _error = e.toString();
-    } finally {
-      _loading = false;
-      notifyListeners();
     }
+
+    _loading = false;
+    notifyListeners();
   }
 
-  // Soft delete - marca el gasto como eliminado con motivo
+  // ── Soft Delete ───────────────────────────────────────────────
+
   Future<void> softDeleteBill(
     String billId,
     String reason,
@@ -101,7 +138,20 @@ class BillsProvider extends ChangeNotifier {
     _loading = true;
     _error = null;
     notifyListeners();
+
     try {
+      final paymentsSnap = await _db
+          .collection('pagos_gastos')
+          .where('billId', isEqualTo: billId)
+          .limit(1)
+          .get();
+
+      if (paymentsSnap.docs.isNotEmpty) {
+        throw Exception(
+          'No se puede eliminar este gasto porque tiene pagos registrados.',
+        );
+      }
+
       await _db.collection('gastos').doc(billId).update({
         'deletedAt': Timestamp.fromDate(DateTime.now()),
         'deletedReason': reason,
@@ -109,69 +159,86 @@ class BillsProvider extends ChangeNotifier {
       });
     } catch (e) {
       _error = e.toString();
-    } finally {
-      _loading = false;
-      notifyListeners();
+      rethrow;
     }
+
+    _loading = false;
+    notifyListeners();
   }
 
-  // Método obsoleto - mantener por compatibilidad pero no usar
+  // método antiguo
   Future<void> deleteBill(String billId) async {
     _loading = true;
     _error = null;
     notifyListeners();
+
     try {
       await _db.collection('gastos').doc(billId).delete();
     } catch (e) {
       _error = e.toString();
-    } finally {
-      _loading = false;
-      notifyListeners();
     }
+
+    _loading = false;
+    notifyListeners();
   }
 
-  // ── Pagos de Gastos ────────────────────────────────────────────
+  // ── Pagos de Gastos ───────────────────────────────────────────
+
   Stream<List<BillPayment>> paymentsStream() {
-    return _db
-        .collection('pagos_gastos')
-        .orderBy('date', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(BillPayment.fromFirestore).toList());
+    return _db.collection('pagos_gastos').snapshots().map((snap) {
+      final payments = snap.docs.map(BillPayment.fromFirestore).toList();
+
+      payments.sort((a, b) => b.date.compareTo(a.date));
+
+      return payments;
+    });
   }
 
   Stream<List<BillPayment>> paymentsForBill(String billId) {
     return _db
         .collection('pagos_gastos')
         .where('billId', isEqualTo: billId)
-        .orderBy('date', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map(BillPayment.fromFirestore).toList());
+        .map((snap) {
+          final payments = snap.docs.map(BillPayment.fromFirestore).toList();
+
+          payments.sort((a, b) => b.date.compareTo(a.date));
+
+          return payments;
+        });
   }
 
   Future<void> addPayment(BillPayment payment) async {
     _loading = true;
     _error = null;
     notifyListeners();
+
     try {
       await _db.collection('pagos_gastos').add(payment.toFirestore());
     } catch (e) {
       _error = e.toString();
-    } finally {
-      _loading = false;
-      notifyListeners();
     }
+
+    _loading = false;
+    notifyListeners();
   }
 
   // ── Reportes ──────────────────────────────────────────────────
+
   Future<List<Bill>> fetchBillsForRange(DateTime from, DateTime to) async {
     final snap = await _db
         .collection('gastos')
-        .where('deletedAt', isNull: true) // Solo gastos no eliminados
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
         .where('date', isLessThan: Timestamp.fromDate(to))
-        .orderBy('date')
         .get();
-    return snap.docs.map(Bill.fromFirestore).toList();
+
+    final bills = snap.docs.map(Bill.fromFirestore).toList();
+
+    final activeBills = bills.where((bill) => !bill.isDeleted).toList();
+
+    activeBills.sort((a, b) => b.date.compareTo(a.date));
+
+    return activeBills;
   }
 
   Future<List<BillPayment>> fetchPaymentsForRange(
@@ -182,18 +249,24 @@ class BillsProvider extends ChangeNotifier {
         .collection('pagos_gastos')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
         .where('date', isLessThan: Timestamp.fromDate(to))
-        .orderBy('date')
         .get();
-    return snap.docs.map(BillPayment.fromFirestore).toList();
+
+    final payments = snap.docs.map(BillPayment.fromFirestore).toList();
+
+    payments.sort((a, b) => b.date.compareTo(a.date));
+
+    return payments;
   }
 
   Future<double> getTotalBillsForRange(DateTime from, DateTime to) async {
     final bills = await fetchBillsForRange(from, to);
+
     return bills.fold<double>(0.0, (sum, bill) => sum + bill.amount);
   }
 
   Future<double> getTotalPaymentsForRange(DateTime from, DateTime to) async {
     final payments = await fetchPaymentsForRange(from, to);
+
     return payments.fold<double>(0.0, (sum, payment) => sum + payment.amount);
   }
 }

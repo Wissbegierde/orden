@@ -27,6 +27,79 @@ class BillsScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          // 🔴 BOTÓN TEMPORAL PARA LIMPIAR TODO
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'LIMPIAR TODO',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('⚠️ ADVERTENCIA'),
+                  content: const Text(
+                    '¿Estás COMPLETAMENTE SEGURO?\n\n'
+                    'Esto eliminará:\n'
+                    '• Todos los gastos\n'
+                    '• Todos los pagos\n'
+                    '• Todo el historial\n\n'
+                    'ESTA ACCIÓN NO SE PUEDE DESHACER',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+
+                        // Mostrar loading
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) =>
+                              const Center(child: CircularProgressIndicator()),
+                        );
+
+                        try {
+                          await context.read<BillsProvider>().deleteAllData();
+
+                          if (context.mounted) {
+                            Navigator.pop(context); // Cerrar loading
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✅ Base de datos limpiada'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            Navigator.pop(context); // Cerrar loading
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('❌ Error: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text(
+                        'SÍ, ELIMINAR TODO',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          // FIN DEL BOTÓN TEMPORAL
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded),
             tooltip: 'Gastos Eliminados',
@@ -452,7 +525,7 @@ class _BillCard extends StatelessWidget {
 
   Color _getCategoryColor() {
     if (bill.customCategory != null) {
-      return const Color(0xFF6B7280); // Gris para categorías personalizadas
+      return const Color(0xFF6B7280);
     }
     switch (bill.category) {
       case BillCategory.arriendo:
@@ -472,7 +545,7 @@ class _BillCard extends StatelessWidget {
 
   IconData _getCategoryIcon() {
     if (bill.customCategory != null) {
-      return Icons.more_horiz_rounded; // Ícono para categorías personalizadas
+      return Icons.more_horiz_rounded;
     }
     switch (bill.category) {
       case BillCategory.arriendo:

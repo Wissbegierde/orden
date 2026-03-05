@@ -70,7 +70,6 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
 
   (List<Map<String, double>>, List<String>) _buildChartData() {
     final now = DateTime.now();
-    // Se usa String para soportar tanto categorías predefinidas como personalizadas
 
     if (_period == ReportPeriod.daily) {
       final data = List.generate(24, (_) => <String, double>{});
@@ -125,7 +124,7 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
       case 'otros':
         return const Color(0xFF6B7280);
       default:
-        return const Color(0xFF6B7280); // Para categorías personalizadas
+        return const Color(0xFF6B7280);
     }
   }
 
@@ -136,7 +135,7 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
       final category = BillCategoryExtension.fromString(categoryKey);
       return category.label;
     } catch (_) {
-      return categoryKey; // Retorna el nombre personalizado tal cual
+      return categoryKey;
     }
   }
 
@@ -158,7 +157,6 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
       ),
       body: Column(
         children: [
-          // Tabs
           Container(
             color: const Color(0xFFEF4444),
             child: TabBar(
@@ -173,7 +171,6 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
               ],
             ),
           ),
-          // Content
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -195,18 +192,24 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
     }
 
     final (chartData, labels) = _buildChartData();
+
+    // ✅ SIMPLIFICADO: Total gastos es la suma de todos los gastos
     final totalGastos = _bills.fold(0.0, (sum, b) => sum + b.amount);
+
+    // ✅ SIMPLIFICADO: Total pagado es la suma de TODOS los pagos registrados
     final totalPagos = _payments.fold(0.0, (sum, p) => sum + p.amount);
+
+    // ✅ Pendiente = Gastos - Pagos
     final pendiente = totalGastos - totalPagos;
 
-    // Aggregate by category (soporta ambas predefinidas y personalizadas)
+    // Aggregate by category
     final byCategory = <String, double>{};
     for (final bill in _bills) {
       final categoryKey = bill.customCategory ?? bill.category?.name ?? 'otros';
       byCategory[categoryKey] = (byCategory[categoryKey] ?? 0) + bill.amount;
     }
 
-    // Ordenar categorías: predefinidas primero, luego personalizadas
+    // Ordenar categorías
     final sortedCategories = byCategory.keys.toList()
       ..sort((a, b) {
         final aIsPredefined = BillCategory.values.any((cat) => cat.name == a);
@@ -221,7 +224,6 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Summary cards
             Row(
               children: [
                 Expanded(
@@ -248,7 +250,6 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
               color: const Color(0xFFFCD34D),
             ),
             const SizedBox(height: 24),
-            // Chart
             if (chartData.isNotEmpty && byCategory.isNotEmpty)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,7 +321,6 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
                   const SizedBox(height: 24),
                 ],
               ),
-            // By category breakdown
             const Text(
               'Desglose por Categoría',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),

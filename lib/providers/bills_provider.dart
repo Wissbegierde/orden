@@ -104,13 +104,26 @@ class BillsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _db.collection('gastos').add(bill.toFirestore());
+      // Crear el gasto
+      final docRef = await _db.collection('gastos').add(bill.toFirestore());
+
+      // ✅ NUEVO: Si el gasto está marcado como pagado, crear automáticamente un registro de pago
+      if (bill.paid) {
+        final payment = BillPayment(
+          billId: docRef.id,
+          amount: bill.amount,
+          date: bill.date,
+          notes: 'Pago automático al registrar gasto',
+        );
+        await _db.collection('pagos_gastos').add(payment.toFirestore());
+      }
     } catch (e) {
       _error = e.toString();
+      rethrow;
+    } finally {
+      _loading = false;
+      notifyListeners();
     }
-
-    _loading = false;
-    notifyListeners();
   }
 
   Future<void> updateBill(String billId, Bill bill) async {
@@ -214,13 +227,41 @@ class BillsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Añadir el pago
       await _db.collection('pagos_gastos').add(payment.toFirestore());
+
+      // ✅ Verificar si el gasto ya está completamente pagado
+      // Obtener el gasto
+      final billDoc = await _db.collection('gastos').doc(payment.billId).get();
+      if (!billDoc.exists) {
+        throw Exception('El gasto no existe');
+      }
+
+      final bill = Bill.fromFirestore(billDoc);
+
+      // Obtener todos los pagos de este gasto
+      final paymentsSnap = await _db
+          .collection('pagos_gastos')
+          .where('billId', isEqualTo: payment.billId)
+          .get();
+
+      final totalPaid = paymentsSnap.docs
+          .map(BillPayment.fromFirestore)
+          .fold<double>(0.0, (sum, p) => sum + p.amount);
+
+      // Si el total pagado >= monto del gasto, marcarlo como pagado
+      if (totalPaid >= bill.amount && !bill.paid) {
+        await _db.collection('gastos').doc(payment.billId).update({
+          'paid': true,
+        });
+      }
     } catch (e) {
       _error = e.toString();
+      rethrow;
+    } finally {
+      _loading = false;
+      notifyListeners();
     }
-
-    _loading = false;
-    notifyListeners();
   }
 
   // ── Reportes ──────────────────────────────────────────────────
@@ -268,5 +309,39 @@ class BillsProvider extends ChangeNotifier {
     final payments = await fetchPaymentsForRange(from, to);
 
     return payments.fold<double>(0.0, (sum, payment) => sum + payment.amount);
+  }
+  // ── Función de limpieza TOTAL (usar solo una vez) ────────────
+
+  Future<void> deleteAllData() async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      // Paso 1: Eliminar TODOS los pagos primero
+      print('🗑️ Eliminando todos los pagos...');
+      final paymentsSnap = await _db.collection('pagos_gastos').get();
+      for (var doc in paymentsSnap.docs) {
+        await doc.reference.delete();
+      }
+      print('✅ ${paymentsSnap.docs.length} pagos eliminados');
+
+      // Paso 2: Eliminar TODOS los gastos
+      print('🗑️ Eliminando todos los gastos...');
+      final billsSnap = await _db.collection('gastos').get();
+      for (var doc in billsSnap.docs) {
+        await doc.reference.delete();
+      }
+      print('✅ ${billsSnap.docs.length} gastos eliminados');
+
+      print('🎉 Base de datos limpiada completamente');
+    } catch (e) {
+      _error = e.toString();
+      print('❌ Error al limpiar: $e');
+      rethrow;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
   }
 }

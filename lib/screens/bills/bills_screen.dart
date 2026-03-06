@@ -140,7 +140,7 @@ class BillsScreen extends StatelessWidget {
                   stream: context.read<BillsProvider>().billsForDay(today),
                   builder: (ctx, snap) {
                     final bills = snap.data ?? [];
-                    final total = bills.fold(0.0, (acc, b) => acc + b.amount);
+                    final total = bills.fold(0.0, (sum, b) => sum + b.amount);
                     final formatted = NumberFormat.currency(
                       locale: 'es_CO',
                       symbol: '\$',
@@ -296,7 +296,6 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-// ✅ CLASE _BillCard CORREGIDA
 class _BillCard extends StatelessWidget {
   final Bill bill;
 
@@ -315,147 +314,129 @@ class _BillCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: IntrinsicHeight(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Ícono de categoría
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: _getCategoryColor().withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(_getCategoryIcon(), color: _getCategoryColor()),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: _getCategoryColor().withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(width: 12),
-
-              // Contenido expandible
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Descripción
-                    Text(
-                      bill.description,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+              child: Icon(_getCategoryIcon(), color: _getCategoryColor()),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    bill.description,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                     ),
-                    const SizedBox(height: 6),
-
-                    // Tipo de pago y fecha
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getPaymentTypeColor(
-                              bill.paymentType,
-                            ).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            bill.paymentType.label,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: _getPaymentTypeColor(bill.paymentType),
-                            ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getPaymentTypeColor(
+                            bill.paymentType,
+                          ).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          bill.paymentType.label,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: _getPaymentTypeColor(bill.paymentType),
                           ),
                         ),
-                        Text(
-                          dateFormatted,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        dateFormatted,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      formatted,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: Color(0xFFEF4444),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'delete') {
+                          _showDeleteDialog(context);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem<String>(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_forever, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Eliminar'),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ],
                 ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // Monto y estado
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        formatted,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: Color(0xFFEF4444),
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        padding: EdgeInsets.zero,
-                        onSelected: (value) {
-                          if (value == 'delete') {
-                            _showDeleteDialog(context);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_forever, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Eliminar'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
                   ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
+                  decoration: BoxDecoration(
+                    color: bill.paid
+                        ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                        : const Color(0xFFFCD34D).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    bill.paid ? 'Pagado' : 'Pendiente',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
                       color: bill.paid
-                          ? const Color(0xFF10B981).withValues(alpha: 0.2)
-                          : const Color(0xFFFCD34D).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      bill.paid ? 'Pagado' : 'Pendiente',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: bill.paid
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFFFCD34D),
-                      ),
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFFCD34D),
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -508,7 +489,7 @@ class _BillCard extends StatelessWidget {
                 await context.read<BillsProvider>().softDeleteBill(
                   bill.id!,
                   reasonController.text.trim(),
-                  'Usuario',
+                  'Usuario', // TODO: Obtener el usuario actual
                 );
 
                 if (context.mounted) {

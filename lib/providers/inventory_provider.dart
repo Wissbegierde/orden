@@ -32,6 +32,7 @@ class InventoryProvider extends ChangeNotifier {
         'price': product.price,
         'quantity': product.quantity,
         'defaultPayment': product.defaultPayment,
+        'expiryDate': product.expiryDate?.toIso8601String(),
       };
 
       if (product.id.isEmpty || product.id == 'new') {
@@ -44,6 +45,19 @@ class InventoryProvider extends ChangeNotifier {
       _error = e.toString();
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// Incrementa el stock de un producto (usado desde compras)
+  Future<void> addStockToProduct(String productId, int quantity) async {
+    if (quantity <= 0) return;
+    try {
+      await _db.collection('productos').doc(productId).update({
+        'quantity': FieldValue.increment(quantity),
+      });
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
     }
   }
 

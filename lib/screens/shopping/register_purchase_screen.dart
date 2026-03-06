@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import '../../models/product.dart';
 import '../../models/shopping.dart';
+import '../../providers/inventory_provider.dart';
 import '../../providers/shopping_provider.dart';
 
 class RegisterPurchaseScreen extends StatefulWidget {
@@ -22,6 +24,8 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
   PaymentType _selectedPaymentType = PaymentType.efectivo;
   DateTime _selectedDate = DateTime.now();
   bool _paid = false;
+  Product? _selectedProduct;
+  final _quantityCtrl = TextEditingController();
 
   final SpeechToText _speech = SpeechToText();
   bool _speechAvailable = false;
@@ -101,6 +105,19 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    final qty = int.tryParse(
+          _quantityCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        0;
+    if (_selectedProduct != null && (qty <= 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Si seleccionas un producto, ingresa cantidad mayor a 0'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
     try {
       final normalizedAmount =
           _amountCtrl.text.replaceAll(' ', '').replaceAll(',', '.');
@@ -113,6 +130,8 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
         providerName: _providerCtrl.text.isEmpty
             ? null
             : _providerCtrl.text.trim(),
+        productId: _selectedProduct?.id,
+        quantity: _selectedProduct != null && qty > 0 ? qty : null,
       );
       context.read<ShoppingProvider>().addShopping(shopping);
       Navigator.pop(context);
@@ -138,6 +157,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
     _amountCtrl.dispose();
     _providerCtrl.dispose();
     _notesCtrl.dispose();
+    _quantityCtrl.dispose();
     super.dispose();
   }
 
@@ -237,6 +257,56 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                     ],
                   ),
                 ),
+
+              // Producto (opcional - integra con inventario)
+              const Text(
+                'Producto (opcional)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 6),
+              StreamBuilder<List<Product>>(
+                stream: context.read<InventoryProvider>().stockStream,
+                builder: (ctx, snap) {
+                  final products = snap.data ?? [];
+                  return DropdownButtonFormField<Product>(
+                    value: _selectedProduct,
+                    hint: const Text('Sin producto (solo compra)'),
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: Color(0xFFF2D51D), width: 2),
+                      ),
+                    ),
+                    items: products
+                        .map((p) => DropdownMenuItem(
+                              value: p,
+                              child: Text('${p.name} (Stock: ${p.quantity})'),
+                            ))
+                        .toList(),
+                    onChanged: (p) => setState(() => _selectedProduct = p),
+                  );
+                },
+              ),
+              if (_selectedProduct != null) ...[
+                const SizedBox(height: 12),
+                _micField(
+                  controller: _quantityCtrl,
+                  label: 'Cantidad a agregar al inventario',
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    if (_selectedProduct == null) return null;
+                    final q =
+                        int.tryParse(v?.replaceAll(RegExp(r'[^0-9]'), '') ?? '');
+                    if (q == null || q <= 0) return 'Ingresa cantidad > 0';
+                    return null;
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
 
               // Descripción
               _micField(

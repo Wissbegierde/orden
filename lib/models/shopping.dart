@@ -34,6 +34,8 @@ class Shopping {
   final DateTime date;
   final bool paid;
   final String? providerName;
+  final String? productId;
+  final int? quantity;
 
   // Soft delete fields
   final DateTime? deletedAt;
@@ -48,6 +50,8 @@ class Shopping {
     required this.date,
     this.paid = false,
     this.providerName,
+    this.productId,
+    this.quantity,
     this.deletedAt,
     this.deletedReason,
     this.deletedBy,
@@ -64,6 +68,8 @@ class Shopping {
       'date': Timestamp.fromDate(date),
       'paid': paid,
       'providerName': providerName,
+      'productId': productId,
+      'quantity': quantity,
       'deletedAt': deletedAt != null ? Timestamp.fromDate(deletedAt!) : null,
       'deletedReason': deletedReason,
       'deletedBy': deletedBy,
@@ -82,6 +88,10 @@ class Shopping {
       date: (data['date'] as Timestamp).toDate(),
       paid: data['paid'] ?? false,
       providerName: data['providerName'],
+      productId: data['productId'],
+      quantity: data['quantity'] != null
+          ? (data['quantity'] as num).toInt()
+          : null,
       deletedAt: data['deletedAt'] != null
           ? (data['deletedAt'] as Timestamp).toDate()
           : null,

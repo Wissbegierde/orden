@@ -79,6 +79,14 @@ class ShoppingProvider extends ChangeNotifier {
         );
         await _db.collection('pagos_compras').add(payment.toFirestore());
       }
+
+      if (shopping.productId != null &&
+          shopping.quantity != null &&
+          shopping.quantity! > 0) {
+        await _db.collection('productos').doc(shopping.productId!).update({
+          'quantity': FieldValue.increment(shopping.quantity!),
+        });
+      }
     } catch (e) {
       _error = e.toString();
       rethrow;

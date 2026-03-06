@@ -5,6 +5,8 @@ import 'bills/bills_screen.dart';
 import 'shopping/shopping_screen.dart';
 import 'reports/global_reports_screen.dart';
 
+import 'inventory/inventory_screen.dart';
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -104,7 +106,12 @@ class HomeScreen extends StatelessWidget {
                       icon: Icons.inventory_2_rounded,
                       label: 'INVENTARIO',
                       color: const Color(0xFF3B82F6),
-                      enabled: false,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const InventoryScreen(),
+                        ),
+                      ),
                     ),
                     ModuleCard(
                       icon: Icons.bar_chart_rounded,

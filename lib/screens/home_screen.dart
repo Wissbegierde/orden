@@ -1,15 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../widgets/module_card.dart';
 import 'income/income_screen.dart';
 import 'bills/bills_screen.dart';
+
+import '../voice/voice_service.dart';
+import '../voice/voice_controller.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final voiceService = context.watch<VoiceService>();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: voiceService.isListening
+            ? Colors.red
+            : const Color(0xFF4F46E5),
+
+        onPressed: () {
+          final controller = VoiceController(
+            context: context,
+            voiceService: voiceService,
+          );
+
+          voiceService.startListening((text) {
+            controller.processCommand(text);
+          });
+        },
+
+        child: Icon(
+          voiceService.isListening ? Icons.mic : Icons.mic_none,
+          size: 28,
+        ),
+      ),
+
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -54,7 +84,26 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+
+              const SizedBox(height: 20),
+
+              // TEXTO RECONOCIDO (para debug)
+              if (voiceService.lastWords.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    "Escuchado: ${voiceService.lastWords}",
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+
+              const SizedBox(height: 20),
+
               const Text(
                 'Módulos',
                 style: TextStyle(
@@ -63,7 +112,9 @@ class HomeScreen extends StatelessWidget {
                   color: Color(0xFF1E1B4B),
                 ),
               ),
+
               const SizedBox(height: 16),
+
               Expanded(
                 child: GridView.count(
                   crossAxisCount: 2,

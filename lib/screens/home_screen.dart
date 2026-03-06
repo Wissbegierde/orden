@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/module_card.dart';
 import 'income/income_screen.dart';
 import 'bills/bills_screen.dart';
+import 'shopping/shopping_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -78,6 +79,15 @@ class HomeScreen extends StatelessWidget {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const IncomeScreen()),
+                      ),
+                    ),
+                    ModuleCard(
+                      icon: Icons.shopping_bag,
+                      label: 'COMPRAS',
+                      color: const Color(0xFFF2D51D),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ShoppingScreen()),
                       ),
                     ),
                     ModuleCard(

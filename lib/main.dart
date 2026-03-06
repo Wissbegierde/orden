@@ -6,6 +6,7 @@ import 'firebase_options.dart';
 import 'providers/income_provider.dart';
 import 'providers/bills_provider.dart';
 import 'screens/home_screen.dart';
+import 'providers/shopping_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => IncomeProvider()),
         ChangeNotifierProvider(create: (_) => BillsProvider()),
+        ChangeNotifierProvider(create: (_) => ShoppingProvider()),
       ],
       child: MaterialApp(
         title: 'Orden',

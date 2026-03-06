@@ -106,6 +106,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                     horizontal: 14,
                     vertical: 10,
                   ),
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
                     color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),

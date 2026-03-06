@@ -1,0 +1,252 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+
+import '../models/shopping.dart';
+
+class ShoppingProvider extends ChangeNotifier {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  bool _loading = false;
+  String? _error;
+
+  bool get loading => _loading;
+  String? get error => _error;
+
+  // ── Compras ────────────────────────────────────────────────────
+
+  Stream<List<Shopping>> shoppingsStream() {
+    return _db.collection('compras').snapshots().map((snap) {
+      final shoppings = snap.docs.map(Shopping.fromFirestore).toList();
+
+      final active = shoppings.where((s) => !s.isDeleted).toList();
+      active.sort((a, b) => b.date.compareTo(a.date));
+
+      return active;
+    });
+  }
+
+  Stream<List<Shopping>> shoppingsForDay(DateTime day) {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+
+    return _db
+        .collection('compras')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('date', isLessThan: Timestamp.fromDate(end))
+        .snapshots()
+        .map((snap) {
+      final shoppings = snap.docs.map(Shopping.fromFirestore).toList();
+
+      final active = shoppings.where((s) => !s.isDeleted).toList();
+      active.sort((a, b) => b.date.compareTo(a.date));
+
+      return active;
+    });
+  }
+
+  Stream<List<Shopping>> unpaidShoppings() {
+    return _db
+        .collection('compras')
+        .where('paid', isEqualTo: false)
+        .snapshots()
+        .map((snap) {
+      final shoppings = snap.docs.map(Shopping.fromFirestore).toList();
+
+      final active = shoppings.where((s) => !s.isDeleted).toList();
+      active.sort((a, b) => b.date.compareTo(a.date));
+
+      return active;
+    });
+  }
+
+  // ── CRUD Compras ───────────────────────────────────────────────
+
+  Future<void> addShopping(Shopping shopping) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final docRef =
+          await _db.collection('compras').add(shopping.toFirestore());
+
+      if (shopping.paid) {
+        final payment = ShoppingPayment(
+          shoppingId: docRef.id,
+          amount: shopping.amount,
+          date: shopping.date,
+          notes: 'Pago automático al registrar compra',
+        );
+        await _db.collection('pagos_compras').add(payment.toFirestore());
+      }
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateShopping(String shoppingId, Shopping shopping) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _db
+          .collection('compras')
+          .doc(shoppingId)
+          .update(shopping.toFirestore());
+    } catch (e) {
+      _error = e.toString();
+    }
+
+    _loading = false;
+    notifyListeners();
+  }
+
+  // ── Soft Delete ────────────────────────────────────────────────
+
+  Future<void> softDeleteShopping(
+    String shoppingId,
+    String reason,
+    String deletedBy,
+  ) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final paymentsSnap = await _db
+          .collection('pagos_compras')
+          .where('shoppingId', isEqualTo: shoppingId)
+          .limit(1)
+          .get();
+
+      if (paymentsSnap.docs.isNotEmpty) {
+        throw Exception(
+          'No se puede eliminar esta compra porque tiene pagos registrados.',
+        );
+      }
+
+      await _db.collection('compras').doc(shoppingId).update({
+        'deletedAt': Timestamp.fromDate(DateTime.now()),
+        'deletedReason': reason,
+        'deletedBy': deletedBy,
+      });
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    }
+
+    _loading = false;
+    notifyListeners();
+  }
+
+  // ── Pagos de Compras ───────────────────────────────────────────
+
+  Stream<List<ShoppingPayment>> paymentsStream() {
+    return _db.collection('pagos_compras').snapshots().map((snap) {
+      final payments =
+          snap.docs.map(ShoppingPayment.fromFirestore).toList();
+
+      payments.sort((a, b) => b.date.compareTo(a.date));
+
+      return payments;
+    });
+  }
+
+  Stream<List<ShoppingPayment>> paymentsForShopping(String shoppingId) {
+    return _db
+        .collection('pagos_compras')
+        .where('shoppingId', isEqualTo: shoppingId)
+        .snapshots()
+        .map((snap) {
+      final payments =
+          snap.docs.map(ShoppingPayment.fromFirestore).toList();
+
+      payments.sort((a, b) => b.date.compareTo(a.date));
+
+      return payments;
+    });
+  }
+
+  Future<void> addPayment(ShoppingPayment payment) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _db.collection('pagos_compras').add(payment.toFirestore());
+
+      final shoppingDoc =
+          await _db.collection('compras').doc(payment.shoppingId).get();
+      if (!shoppingDoc.exists) {
+        throw Exception('La compra no existe');
+      }
+
+      final shopping = Shopping.fromFirestore(shoppingDoc);
+
+      final paymentsSnap = await _db
+          .collection('pagos_compras')
+          .where('shoppingId', isEqualTo: payment.shoppingId)
+          .get();
+
+      final totalPaid = paymentsSnap.docs
+          .map(ShoppingPayment.fromFirestore)
+          .fold<double>(0.0, (sum, p) => sum + p.amount);
+
+      if (totalPaid >= shopping.amount && !shopping.paid) {
+        await _db.collection('compras').doc(payment.shoppingId).update({
+          'paid': true,
+        });
+      }
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Reportes ──────────────────────────────────────────────────
+
+  Future<List<Shopping>> fetchShoppingsForRange(
+    DateTime from,
+    DateTime to,
+  ) async {
+    final snap = await _db
+        .collection('compras')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .where('date', isLessThan: Timestamp.fromDate(to))
+        .get();
+
+    final shoppings = snap.docs.map(Shopping.fromFirestore).toList();
+
+    final active = shoppings.where((s) => !s.isDeleted).toList();
+
+    active.sort((a, b) => b.date.compareTo(a.date));
+
+    return active;
+  }
+
+  Future<List<ShoppingPayment>> fetchPaymentsForRange(
+    DateTime from,
+    DateTime to,
+  ) async {
+    final snap = await _db
+        .collection('pagos_compras')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .where('date', isLessThan: Timestamp.fromDate(to))
+        .get();
+
+    final payments = snap.docs.map(ShoppingPayment.fromFirestore).toList();
+
+    payments.sort((a, b) => b.date.compareTo(a.date));
+
+    return payments;
+  }
+}
+

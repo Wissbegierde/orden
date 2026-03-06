@@ -3,6 +3,7 @@ import '../widgets/module_card.dart';
 import 'income/income_screen.dart';
 import 'bills/bills_screen.dart';
 import 'shopping/shopping_screen.dart';
+import 'reports/global_reports_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -109,7 +110,12 @@ class HomeScreen extends StatelessWidget {
                       icon: Icons.bar_chart_rounded,
                       label: 'REPORTES',
                       color: const Color(0xFFF59E0B),
-                      enabled: false,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ReportsModuleScreen(),
+                        ),
+                      ),
                     ),
                     ModuleCard(
                       icon: Icons.settings_rounded,

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "834418935197",
+    "project_id": "orden-325a5",
+    "storage_bucket": "orden-325a5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:834418935197:android:414aa392c0da0954d0db74",
+        "android_client_info": {
+          "package_name": "com.example.orden"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "834418935197-khprkr5rump6ju1cj4ugeoe6ciu3rb9v.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBxiI6oko7E-cdyn0OxP4qokzupR0mH69M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "834418935197-khprkr5rump6ju1cj4ugeoe6ciu3rb9v.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

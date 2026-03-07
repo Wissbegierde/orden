@@ -92,12 +92,67 @@ class IncomeProvider extends ChangeNotifier {
         .map((snap) => snap.docs.map(IncomePayment.fromFirestore).toList());
   }
 
+  Stream<List<IncomePayment>> paymentsForDay(DateTime day) {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    return _db
+        .collection('abonos')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('date', isLessThan: Timestamp.fromDate(end))
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(IncomePayment.fromFirestore).toList());
+  }
+
   Future<void> addPayment(IncomePayment payment) async {
     _loading = true;
     _error = null;
     notifyListeners();
     try {
       await _db.collection('abonos').add(payment.toFirestore());
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Deudas de crédito ─────────────────────────────────────────
+  // Returns all credit sales that still have a pending balance
+  Stream<List<IncomeSale>> creditDebtsStream() {
+    return _db
+        .collection('ventas')
+        .where('paymentType', isEqualTo: 'credito')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs
+                  .map(IncomeSale.fromFirestore)
+                  .where((s) => (s.pendingAmount ?? 0) > 0)
+                  .toList()
+                ..sort((a, b) => b.date.compareTo(a.date)),
+        );
+  }
+
+  // Apply a payment against a credit sale, reducing its pendingAmount
+  Future<void> applyPaymentToSale(String saleId, double paymentAmount) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final saleRef = _db.collection('ventas').doc(saleId);
+      await _db.runTransaction((tx) async {
+        final doc = await tx.get(saleRef);
+        if (!doc.exists) throw Exception('Venta no encontrada');
+        final current =
+            (doc.data()?['pendingAmount'] as num?)?.toDouble() ?? 0.0;
+        final newPending = (current - paymentAmount).clamp(
+          0.0,
+          double.infinity,
+        );
+        tx.update(saleRef, {'pendingAmount': newPending});
+      });
     } catch (e) {
       _error = e.toString();
     } finally {

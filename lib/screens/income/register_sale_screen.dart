@@ -18,9 +18,11 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
   final _qtyCtrl = TextEditingController();
   final _clientCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _initialPaymentCtrl = TextEditingController();
 
   Product? _selectedProduct;
   PaymentType _selectedType = PaymentType.efectivo;
+  bool _hasInitialPayment = false;
 
   final SpeechToText _speech = SpeechToText();
   bool _speechAvailable = false;
@@ -101,6 +103,17 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
       return;
     }
 
+    double? initialPayment;
+    double? pendingAmount;
+    if (_selectedType == PaymentType.credito) {
+      if (_hasInitialPayment && _initialPaymentCtrl.text.isNotEmpty) {
+        initialPayment = double.tryParse(
+          _initialPaymentCtrl.text.replaceAll(RegExp(r'[^0-9.]'), ''),
+        );
+      }
+      pendingAmount = _currentTotal - (initialPayment ?? 0.0);
+    }
+
     final sale = IncomeSale(
       productId: _selectedProduct!.id,
       productName: _selectedProduct!.name,
@@ -110,6 +123,8 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
       clientName: _clientCtrl.text.trim().isEmpty
           ? null
           : _clientCtrl.text.trim(),
+      initialPayment: initialPayment,
+      pendingAmount: pendingAmount,
       date: DateTime.now(),
       notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
     );
@@ -125,6 +140,7 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
     _qtyCtrl.dispose();
     _clientCtrl.dispose();
     _notesCtrl.dispose();
+    _initialPaymentCtrl.dispose();
     super.dispose();
   }
 
@@ -356,15 +372,132 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Cliente
-                  _SectionLabel(text: 'Cliente (opcional)'),
-                  _VoiceField(
-                    controller: _clientCtrl,
-                    hint: 'Nombre del cliente',
-                    isListening: _isListening && _activeField == _clientCtrl,
-                    onMic: _speechAvailable ? () => _listen(_clientCtrl) : null,
-                  ),
-                  const SizedBox(height: 16),
+                  // --- Bloque condicional: Crédito ---
+                  if (_selectedType == PaymentType.credito) ...[
+                    // Cliente obligatorio en crédito
+                    _SectionLabel(text: 'Cliente *'),
+                    _VoiceField(
+                      controller: _clientCtrl,
+                      hint: 'Nombre del cliente (requerido en crédito)',
+                      isListening: _isListening && _activeField == _clientCtrl,
+                      onMic: _speechAvailable
+                          ? () => _listen(_clientCtrl)
+                          : null,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Requerido en crédito'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Switch: ¿Abono inicial?
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.payments_outlined,
+                                color: Colors.orange,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  '¿El cliente hace un abono inicial?',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E1B4B),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              Switch(
+                                value: _hasInitialPayment,
+                                activeColor: Colors.orange,
+                                onChanged: (v) =>
+                                    setState(() => _hasInitialPayment = v),
+                              ),
+                            ],
+                          ),
+                          if (_hasInitialPayment) ...[
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _initialPaymentCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: 'Monto del abono inicial',
+                                prefixText: '\$ ',
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: Colors.orange,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                              validator: (v) {
+                                if (!_hasInitialPayment) return null;
+                                if (v == null || v.isEmpty) {
+                                  return 'Ingresa el monto del abono';
+                                }
+                                final parsed = double.tryParse(
+                                  v.replaceAll(RegExp(r'[^0-9.]'), ''),
+                                );
+                                if (parsed == null || parsed <= 0) {
+                                  return 'Monto inválido';
+                                }
+                                if (parsed > _currentTotal) {
+                                  return 'No puede superar el total';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    // Cliente opcional en contado/nequi
+                    _SectionLabel(text: 'Cliente (opcional)'),
+                    _VoiceField(
+                      controller: _clientCtrl,
+                      hint: 'Nombre del cliente',
+                      isListening: _isListening && _activeField == _clientCtrl,
+                      onMic: _speechAvailable
+                          ? () => _listen(_clientCtrl)
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Notas
                   _SectionLabel(text: 'Notas (opcional)'),

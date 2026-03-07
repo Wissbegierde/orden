@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../../models/income_payment.dart';
+import '../../models/income_sale.dart';
 import '../../providers/income_provider.dart';
 
 class RegisterPaymentScreen extends StatefulWidget {
@@ -13,14 +15,15 @@ class RegisterPaymentScreen extends StatefulWidget {
 
 class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _clientCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+
+  // Selected debtor from the search dropdown
+  IncomeSale? _selectedDebt;
 
   final SpeechToText _speech = SpeechToText();
   bool _speechAvailable = false;
   bool _isListening = false;
-  TextEditingController? _activeField;
 
   @override
   void initState() {
@@ -40,10 +43,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
       setState(() => _isListening = false);
       return;
     }
-    setState(() {
-      _isListening = true;
-      _activeField = field;
-    });
+    setState(() => _isListening = true);
     await _speech.listen(
       onResult: (result) {
         setState(() {
@@ -65,19 +65,38 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedDebt == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona el cliente deudor')),
+      );
+      return;
+    }
+
+    final paymentAmount = double.parse(
+      _amountCtrl.text.replaceAll(RegExp(r'[^0-9.]'), ''),
+    );
+
+    final provider = context.read<IncomeProvider>();
+
+    // Save the abono record
     final payment = IncomePayment(
-      clientName: _clientCtrl.text.trim(),
-      amount: double.parse(_amountCtrl.text.replaceAll(',', '.')),
+      clientName: _selectedDebt!.clientName ?? '',
+      amount: paymentAmount,
       date: DateTime.now(),
       notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
     );
-    await context.read<IncomeProvider>().addPayment(payment);
+    await provider.addPayment(payment);
+
+    // Apply the abono against the pending sale balance
+    if (_selectedDebt!.id != null) {
+      await provider.applyPaymentToSale(_selectedDebt!.id!, paymentAmount);
+    }
+
     if (mounted) Navigator.pop(context);
   }
 
   @override
   void dispose() {
-    _clientCtrl.dispose();
     _amountCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
@@ -85,6 +104,12 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currency = NumberFormat.currency(
+      locale: 'es_CO',
+      symbol: '\$',
+      decimalDigits: 0,
+    );
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
@@ -138,43 +163,176 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                     ],
                   ),
                 ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
 
-              _label('Cliente *'),
-              _voiceField(
-                controller: _clientCtrl,
-                hint: 'Nombre del cliente',
-                isListening: _isListening && _activeField == _clientCtrl,
-                onMic: _speechAvailable ? () => _listen(_clientCtrl) : null,
-                validator: (v) => (v == null || v.isEmpty)
-                    ? 'Ingresa el nombre del cliente'
-                    : null,
+              // ── Buscador de clientes deudores ─────────────────────────
+              _label('Cliente deudor *'),
+              StreamBuilder<List<IncomeSale>>(
+                stream: context.read<IncomeProvider>().creditDebtsStream(),
+                builder: (ctx, snapshot) {
+                  final debts = snapshot.data ?? [];
+
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      debts.isEmpty) {
+                    return const LinearProgressIndicator();
+                  }
+
+                  if (debts.isEmpty) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.amber,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No hay clientes con deudas pendientes.',
+                              style: TextStyle(
+                                color: Color(0xFF1E1B4B),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return DropdownMenu<IncomeSale>(
+                        width: constraints.maxWidth,
+                        menuHeight: 260,
+                        hintText: 'Busca cliente por nombre...',
+                        initialSelection: _selectedDebt,
+                        inputDecorationTheme: InputDecorationTheme(
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF3B82F6),
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        dropdownMenuEntries: debts.map((debt) {
+                          return DropdownMenuEntry<IncomeSale>(
+                            value: debt,
+                            label:
+                                '${debt.clientName ?? 'Sin nombre'} — Debe: ${currency.format(debt.pendingAmount ?? 0)}',
+                          );
+                        }).toList(),
+                        onSelected: (debt) {
+                          setState(() => _selectedDebt = debt);
+                        },
+                      );
+                    },
+                  );
+                },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
+              // Deuda pendiente resumen
+              if (_selectedDebt != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.account_balance_wallet_outlined,
+                        color: Color(0xFFEF4444),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _selectedDebt!.clientName ?? '',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E1B4B),
+                            ),
+                          ),
+                          Text(
+                            'Saldo pendiente: ${currency.format(_selectedDebt!.pendingAmount ?? 0)}',
+                            style: const TextStyle(
+                              color: Color(0xFFEF4444),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+              // ── Monto del abono ───────────────────────────────────────
               _label('Monto del abono *'),
               _voiceField(
                 controller: _amountCtrl,
                 hint: 'Ej: 20000',
                 keyboardType: TextInputType.number,
-                isListening: _isListening && _activeField == _amountCtrl,
+                isListening: _isListening,
                 onMic: _speechAvailable ? () => _listen(_amountCtrl) : null,
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Ingresa el monto';
-                  if (double.tryParse(v.replaceAll(',', '.')) == null) {
-                    return 'Monto inválido';
+                  final parsed = double.tryParse(
+                    v.replaceAll(RegExp(r'[^0-9.]'), ''),
+                  );
+                  if (parsed == null || parsed <= 0) return 'Monto inválido';
+                  if (_selectedDebt != null &&
+                      parsed > (_selectedDebt!.pendingAmount ?? 0)) {
+                    return 'Supera la deuda pendiente (${currency.format(_selectedDebt!.pendingAmount ?? 0)})';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 16),
 
+              // ── Notas ─────────────────────────────────────────────────
               _label('Notas (opcional)'),
               _voiceField(
                 controller: _notesCtrl,
                 hint: 'Detalles del abono',
                 maxLines: 3,
-                isListening: _isListening && _activeField == _notesCtrl,
+                isListening: false,
                 onMic: _speechAvailable ? () => _listen(_notesCtrl) : null,
               ),
               const SizedBox(height: 30),

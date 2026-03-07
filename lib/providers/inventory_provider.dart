@@ -30,6 +30,7 @@ class InventoryProvider extends ChangeNotifier {
       final data = {
         'name': product.name,
         'price': product.price,
+        'costPrice': product.costPrice,
         'quantity': product.quantity,
         'defaultPayment': product.defaultPayment,
         'expiryDate': product.expiryDate?.toIso8601String(),

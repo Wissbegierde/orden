@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Actualizar Precios — Orden</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1E1B4B;
+      color: #fff;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: #2D2A5E;
+      border-radius: 16px;
+      padding: 32px;
+      width: 600px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.3);
+    }
+    h1 { font-size: 22px; margin-bottom: 8px; }
+    p.sub { color: #a5b4fc; font-size: 13px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    th, td { text-align: left; padding: 10px 12px; font-size: 13px; }
+    th { background: #4F46E5; border-radius: 4px; }
+    tr:nth-child(even) td { background: rgba(255,255,255,.04); }
+    td { border-bottom: 1px solid rgba(255,255,255,.08); }
+    button {
+      background: linear-gradient(135deg, #4F46E5, #7C3AED);
+      color: #fff; border: none; padding: 14px 28px;
+      border-radius: 12px; font-size: 15px; font-weight: 700;
+      cursor: pointer; width: 100%;
+      transition: opacity .2s;
+    }
+    button:hover { opacity: .9; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    #log {
+      margin-top: 16px; font-size: 12px;
+      max-height: 180px; overflow-y: auto;
+      background: rgba(0,0,0,.3); border-radius: 8px;
+      padding: 12px; display: none;
+    }
+    .ok { color: #34D399; }
+    .err { color: #F87171; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>☕ Actualizar Precios de Productos</h1>
+    <p class="sub">Actualiza los precios de venta y costo de compra en Firestore</p>
+
+    <table>
+      <tr><th>Producto</th><th>Precio Venta</th><th>Costo Compra</th></tr>
+      <tr><td>Café Volcán en granos 250gr</td><td>$31.460</td><td>$11.460</td></tr>
+      <tr><td>Café Finca en grano 454gr</td><td>$65.780</td><td>$45.780</td></tr>
+      <tr><td>Café Mujeres Cafeteras en granos 454gr</td><td>$65.780</td><td>$45.780</td></tr>
+      <tr><td>Café Origen Nariño en granos 454gr</td><td>$65.780</td><td>$45.780</td></tr>
+      <tr><td>Café Colina en grano 454gr</td><td>$56.650</td><td>$36.650</td></tr>
+    </table>
+
+    <button id="btn" onclick="updatePrices()">🚀 Actualizar Precios en Firestore</button>
+    <div id="log"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, doc, updateDoc }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBqlCbjvE6akMqBM-obEol9txNPo9xzxjU",
+      authDomain: "ordensoftii.firebaseapp.com",
+      projectId: "ordensoftii",
+      storageBucket: "ordensoftii.firebasestorage.app",
+      messagingSenderId: "756698851622",
+      appId: "1:756698851622:web:7ce65f40592d52c25379e7",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Mapa de productos: nombre parcial → { price (venta), costPrice (compra) }
+    const PRICE_MAP = [
+      { match: "volcán",     price: 31460, costPrice: 11460 },
+      { match: "volcan",     price: 31460, costPrice: 11460 },
+      { match: "finca",      price: 65780, costPrice: 45780 },
+      { match: "mujeres",    price: 65780, costPrice: 45780 },
+      { match: "cafeteras",  price: 65780, costPrice: 45780 },
+      { match: "origen",     price: 65780, costPrice: 45780 },
+      { match: "nariño",     price: 65780, costPrice: 45780 },
+      { match: "narino",     price: 65780, costPrice: 45780 },
+      { match: "colina",     price: 56650, costPrice: 36650 },
+    ];
+
+    function findPriceForProduct(name) {
+      const lower = name.toLowerCase();
+      for (const entry of PRICE_MAP) {
+        if (lower.includes(entry.match)) {
+          return { price: entry.price, costPrice: entry.costPrice };
+        }
+      }
+      return null;
+    }
+
+    window.updatePrices = async function() {
+      const btn = document.getElementById("btn");
+      const logEl = document.getElementById("log");
+      logEl.style.display = "block";
+      logEl.innerHTML = "";
+      btn.disabled = true;
+      btn.textContent = "⏳ Actualizando...";
+
+      function log(msg, cls = "") {
+        logEl.innerHTML += `<div class="${cls}">${msg}</div>`;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      try {
+        log("📦 Leyendo colección 'productos'...");
+        const snap = await getDocs(collection(db, "productos"));
+        log(`Encontrados ${snap.size} productos.`);
+
+        let updated = 0;
+        for (const d of snap.docs) {
+          const data = d.data();
+          const name = data.name || "";
+          const prices = findPriceForProduct(name);
+
+          if (prices) {
+            log(`✏️ ${name}: venta=${prices.price}, costo=${prices.costPrice}`);
+            await updateDoc(doc(db, "productos", d.id), {
+              price: prices.price,
+              costPrice: prices.costPrice,
+            });
+            log(`✅ ${name} actualizado.`, "ok");
+            updated++;
+          } else {
+            log(`⚠️ ${name}: no encontrado en la tabla, se omite.`);
+          }
+        }
+
+        log(`\n🎉 ¡Listo! ${updated} productos actualizados.`, "ok");
+      } catch (e) {
+        log(`❌ Error: ${e.message}`, "err");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "🚀 Actualizar Precios en Firestore";
+      }
+    };
+  </script>
+</body>
+</html>

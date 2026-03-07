@@ -2,6 +2,7 @@ class Product {
   final String id;
   final String name;
   final double price;
+  final double costPrice;
   final int quantity;
   final String defaultPayment;
   final DateTime? expiryDate;
@@ -10,6 +11,7 @@ class Product {
     required this.id,
     required this.name,
     required this.price,
+    this.costPrice = 0,
     required this.quantity,
     this.defaultPayment = 'efectivo',
     this.expiryDate,
@@ -22,13 +24,15 @@ class Product {
     return diff.inDays <= 30 && diff.inDays >= 0;
   }
 
-  bool get isExpired => expiryDate != null && expiryDate!.isBefore(DateTime.now());
+  bool get isExpired =>
+      expiryDate != null && expiryDate!.isBefore(DateTime.now());
 
   factory Product.fromFirestore(Map<String, dynamic> data, String id) {
     return Product(
       id: id,
       name: data['name'] ?? '',
       price: (data['price'] as num).toDouble(),
+      costPrice: (data['costPrice'] as num?)?.toDouble() ?? 0,
       quantity: (data['quantity'] as num).toInt(),
       defaultPayment: data['defaultPayment'] ?? 'efectivo',
       expiryDate: data['expiryDate'] != null

@@ -40,6 +40,17 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
   void initState() {
     super.initState();
     _initSpeech();
+    _quantityCtrl.addListener(_recalcTotal);
+  }
+
+  void _recalcTotal() {
+    if (_selectedProduct == null || _selectedProduct!.costPrice <= 0) return;
+    final qty =
+        int.tryParse(_quantityCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    if (qty > 0) {
+      final total = _selectedProduct!.costPrice * qty;
+      _amountCtrl.text = total.toStringAsFixed(0);
+    }
   }
 
   Future<void> _initSpeech() async {
@@ -105,22 +116,23 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    final qty = int.tryParse(
-          _quantityCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''),
-        ) ??
-        0;
+    final qty =
+        int.tryParse(_quantityCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
     if (_selectedProduct != null && (qty <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Si seleccionas un producto, ingresa cantidad mayor a 0'),
+          content: Text(
+            'Si seleccionas un producto, ingresa cantidad mayor a 0',
+          ),
           backgroundColor: Color(0xFFEF4444),
         ),
       );
       return;
     }
     try {
-      final normalizedAmount =
-          _amountCtrl.text.replaceAll(' ', '').replaceAll(',', '.');
+      final normalizedAmount = _amountCtrl.text
+          .replaceAll(' ', '')
+          .replaceAll(',', '.');
       final shopping = Shopping(
         description: _descriptionCtrl.text.trim(),
         amount: double.parse(normalizedAmount),
@@ -227,8 +239,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                     color: const Color(0xFFF2D51D).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color:
-                          const Color(0xFFF2D51D).withValues(alpha: 0.3),
+                      color: const Color(0xFFF2D51D).withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -275,18 +286,41 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFF2D51D), width: 2),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFF2D51D),
+                          width: 2,
+                        ),
                       ),
                     ),
                     isExpanded: true,
                     items: products
-                        .map((p) => DropdownMenuItem(
-                              value: p,
-                              child: Text('${p.name} (Stock: ${p.quantity})'),
-                            ))
+                        .map(
+                          (p) => DropdownMenuItem(
+                            value: p,
+                            child: Text('${p.name} (Stock: ${p.quantity})'),
+                          ),
+                        )
                         .toList(),
-                    onChanged: (p) => setState(() => _selectedProduct = p),
+                    onChanged: (p) {
+                      setState(() => _selectedProduct = p);
+                      if (p != null) {
+                        _descriptionCtrl.text = p.name;
+                        final qty =
+                            int.tryParse(
+                              _quantityCtrl.text.replaceAll(
+                                RegExp(r'[^0-9]'),
+                                '',
+                              ),
+                            ) ??
+                            0;
+                        if (p.costPrice > 0 && qty > 0) {
+                          _amountCtrl.text = (p.costPrice * qty)
+                              .toStringAsFixed(0);
+                        } else if (p.costPrice > 0) {
+                          _amountCtrl.text = p.costPrice.toStringAsFixed(0);
+                        }
+                      }
+                    },
                   );
                 },
               ),
@@ -298,8 +332,9 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                   keyboardType: TextInputType.number,
                   validator: (v) {
                     if (_selectedProduct == null) return null;
-                    final q =
-                        int.tryParse(v?.replaceAll(RegExp(r'[^0-9]'), '') ?? '');
+                    final q = int.tryParse(
+                      v?.replaceAll(RegExp(r'[^0-9]'), '') ?? '',
+                    );
                     if (q == null || q <= 0) return 'Ingresa cantidad > 0';
                     return null;
                   },
@@ -320,8 +355,9 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                 controller: _amountCtrl,
                 label: 'Monto',
                 prefixText: r'$ ',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 validator: _validateAmount,
               ),
               const SizedBox(height: 16),
@@ -357,16 +393,15 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide:
-                        const BorderSide(color: Color(0xFFF2D51D), width: 2),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFF2D51D),
+                      width: 2,
+                    ),
                   ),
                 ),
                 items: PaymentType.values
                     .map(
-                      (t) => DropdownMenuItem(
-                        value: t,
-                        child: Text(t.label),
-                      ),
+                      (t) => DropdownMenuItem(value: t, child: Text(t.label)),
                     )
                     .toList(),
                 onChanged: (t) => setState(() => _selectedPaymentType = t!),
@@ -410,7 +445,9 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                 ),
                 child: ListTile(
                   title: const Text('Fecha de la Compra'),
-                  subtitle: Text(DateFormat('dd/MM/yyyy').format(_selectedDate)),
+                  subtitle: Text(
+                    DateFormat('dd/MM/yyyy').format(_selectedDate),
+                  ),
                   trailing: const Icon(
                     Icons.calendar_today_rounded,
                     color: Color(0xFFF2D51D),

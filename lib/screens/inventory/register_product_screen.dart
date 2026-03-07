@@ -17,6 +17,7 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
+  final _costPriceCtrl = TextEditingController();
   final _quantityCtrl = TextEditingController();
 
   PaymentType _selectedType = PaymentType.efectivo;
@@ -29,6 +30,9 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
       final p = widget.productToEdit!;
       _nameCtrl.text = p.name;
       _priceCtrl.text = p.price.toStringAsFixed(0);
+      _costPriceCtrl.text = p.costPrice > 0
+          ? p.costPrice.toStringAsFixed(0)
+          : '';
       _quantityCtrl.text = p.quantity.toString();
       _selectedType = PaymentTypeExtension.fromString(p.defaultPayment);
       _expiryDate = p.expiryDate;
@@ -52,6 +56,11 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
     final price =
         double.tryParse(_priceCtrl.text.replaceAll(RegExp(r'[^0-9.]'), '')) ??
         0.0;
+    final costPrice =
+        double.tryParse(
+          _costPriceCtrl.text.replaceAll(RegExp(r'[^0-9.]'), ''),
+        ) ??
+        0.0;
     final quantity =
         int.tryParse(_quantityCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
 
@@ -59,6 +68,7 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
       id: widget.productToEdit?.id ?? 'new',
       name: name,
       price: price,
+      costPrice: costPrice,
       quantity: quantity,
       defaultPayment: _selectedType.name,
       expiryDate: _expiryDate,
@@ -73,6 +83,7 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _priceCtrl.dispose();
+    _costPriceCtrl.dispose();
     _quantityCtrl.dispose();
     super.dispose();
   }
@@ -145,6 +156,14 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
               ),
               const SizedBox(height: 16),
 
+              _SectionLabel(text: 'Precio de Compra (Costo)'),
+              TextFormField(
+                controller: _costPriceCtrl,
+                keyboardType: TextInputType.number,
+                decoration: _inputDecoration('Ej: 18000'),
+              ),
+              const SizedBox(height: 16),
+
               _SectionLabel(text: 'Cantidad en Stock *'),
               TextFormField(
                 controller: _quantityCtrl,
@@ -182,8 +201,7 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
                       if (_expiryDate != null)
                         IconButton(
                           icon: const Icon(Icons.clear, color: Colors.grey),
-                          onPressed: () =>
-                              setState(() => _expiryDate = null),
+                          onPressed: () => setState(() => _expiryDate = null),
                           tooltip: 'Quitar fecha',
                         ),
                       IconButton(

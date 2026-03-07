@@ -127,9 +127,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
         paymentType: _selectedPaymentType,
         date: _selectedDate,
         paid: _paid,
-        providerName: _providerCtrl.text.isEmpty
-            ? null
-            : _providerCtrl.text.trim(),
+        providerName: _providerCtrl.text.trim(),
         productId: _selectedProduct?.id,
         quantity: _selectedProduct != null && qty > 0 ? qty : null,
       );
@@ -328,13 +326,16 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Proveedor
+              // Proveedor (obligatorio)
               _micField(
                 controller: _providerCtrl,
-                label: 'Proveedor (Opcional)',
+                label: 'Proveedor',
                 maxLength: _maxProviderLength,
                 validator: (v) {
-                  if (v != null && v.length > _maxProviderLength) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'El proveedor es obligatorio';
+                  }
+                  if (v.length > _maxProviderLength) {
                     return 'Máximo $_maxProviderLength caracteres';
                   }
                   return null;

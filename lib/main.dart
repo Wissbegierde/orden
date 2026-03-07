@@ -7,6 +7,9 @@ import 'providers/income_provider.dart';
 import 'providers/inventory_provider.dart';
 import 'providers/expense_provider.dart';
 import 'screens/home_screen.dart';
+import 'providers/shopping_provider.dart';
+//import 'providers/bills_provider.dart';
+import 'providers/inventory_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +26,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => IncomeProvider()),
+        ChangeNotifierProvider(create: (_) => ShoppingProvider()),
         ChangeNotifierProvider(create: (_) => InventoryProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
       ],

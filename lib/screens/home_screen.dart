@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../widgets/module_card.dart';
 import 'income/income_screen.dart';
 import 'expenses/expenses_screen.dart';
+//import 'bills/bills_screen.dart';
+import 'shopping/shopping_screen.dart';
+import 'reports/global_reports_screen.dart';
+
 import 'inventory/inventory_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -82,6 +86,15 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                     ModuleCard(
+                      icon: Icons.shopping_bag,
+                      label: 'COMPRAS',
+                      color: const Color(0xFFF2D51D),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ShoppingScreen()),
+                      ),
+                    ),
+                    ModuleCard(
                       icon: Icons.trending_down_rounded,
                       label: 'GASTOS',
                       color: const Color(0xFFE11D48),
@@ -105,7 +118,12 @@ class HomeScreen extends StatelessWidget {
                       icon: Icons.bar_chart_rounded,
                       label: 'REPORTES',
                       color: const Color(0xFFF59E0B),
-                      enabled: false,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ReportsModuleScreen(),
+                        ),
+                      ),
                     ),
                     ModuleCard(
                       icon: Icons.settings_rounded,

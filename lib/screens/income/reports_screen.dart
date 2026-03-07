@@ -82,6 +82,7 @@ class _ReportsScreenState extends State<ReportsScreen>
           PaymentType.efectivo: 0.0,
           PaymentType.nequi: 0.0,
           PaymentType.credito: 0.0,
+          PaymentType.transferencia: 0.0,
         },
       );
       final labels = List.generate(
@@ -143,6 +144,8 @@ class _ReportsScreenState extends State<ReportsScreen>
         return const Color(0xFF8B5CF6); // Morado
       case PaymentType.credito:
         return const Color(0xFFEF4444); // Rojo
+      case PaymentType.transferencia:
+        return const Color(0xFF06B6D4); // Cyan
     }
   }
 

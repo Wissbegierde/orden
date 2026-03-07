@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum PaymentType { efectivo, nequi, credito }
+enum PaymentType { efectivo, nequi, credito, transferencia }
 
 extension PaymentTypeExtension on PaymentType {
   String get label {
@@ -11,6 +11,8 @@ extension PaymentTypeExtension on PaymentType {
         return 'Nequi';
       case PaymentType.credito:
         return 'Crédito';
+      case PaymentType.transferencia:
+        return 'Transferencia';
     }
   }
 
@@ -24,12 +26,14 @@ extension PaymentTypeExtension on PaymentType {
 
 class IncomeSale {
   final String? id;
-  final String? productId; // ID del producto elegido
-  final String? productName; // Nombre del producto
-  final int? quantity; // Cantidad vendida
+  final String? productId;
+  final String? productName;
+  final int? quantity;
   final double amount; // Total = quantity * price
   final PaymentType paymentType;
   final String? clientName;
+  final double? initialPayment; // Abono inicial dado en ventas a crédito
+  final double? pendingAmount; // Saldo pendiente = amount - initialPayment
   final DateTime date;
   final String? notes;
 
@@ -41,6 +45,8 @@ class IncomeSale {
     required this.amount,
     required this.paymentType,
     this.clientName,
+    this.initialPayment,
+    this.pendingAmount,
     required this.date,
     this.notes,
   });
@@ -53,6 +59,8 @@ class IncomeSale {
       'amount': amount,
       'paymentType': paymentType.name,
       'clientName': clientName,
+      'initialPayment': initialPayment,
+      'pendingAmount': pendingAmount,
       'date': Timestamp.fromDate(date),
       'notes': notes,
     };
@@ -72,6 +80,12 @@ class IncomeSale {
         data['paymentType'] ?? 'efectivo',
       ),
       clientName: data['clientName'],
+      initialPayment: data['initialPayment'] != null
+          ? (data['initialPayment'] as num).toDouble()
+          : null,
+      pendingAmount: data['pendingAmount'] != null
+          ? (data['pendingAmount'] as num).toDouble()
+          : null,
       date: (data['date'] as Timestamp).toDate(),
       notes: data['notes'],
     );

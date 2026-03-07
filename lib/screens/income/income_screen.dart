@@ -1,14 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../models/income_payment.dart';
 import '../../models/income_sale.dart';
 import '../../providers/income_provider.dart';
 import 'register_sale_screen.dart';
 import 'register_payment_screen.dart';
 import 'reports_screen.dart';
 
-class IncomeScreen extends StatelessWidget {
+class IncomeScreen extends StatefulWidget {
   const IncomeScreen({super.key});
+
+  @override
+  State<IncomeScreen> createState() => _IncomeScreenState();
+}
+
+class _IncomeScreenState extends State<IncomeScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,63 +137,124 @@ class IncomeScreen extends StatelessWidget {
               ],
             ),
           ),
-          // Sales list
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: const [
-                Text(
-                  'Ventas de hoy',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Color(0xFF1E1B4B),
-                  ),
-                ),
+          // ── TabBar ──────────────────────────────────────────────────
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE5E7EB),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: const Color(0xFF10B981),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: Colors.white,
+              unselectedLabelColor: const Color(0xFF6B7280),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+              dividerColor: Colors.transparent,
+              tabs: const [
+                Tab(text: 'Ventas de hoy'),
+                Tab(text: 'Abonos de hoy'),
               ],
             ),
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: StreamBuilder<List<IncomeSale>>(
-              stream: context.read<IncomeProvider>().salesForDay(today),
-              builder: (ctx, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF10B981)),
-                  );
-                }
-                final sales = snap.data ?? [];
-                if (sales.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 60,
-                          color: Colors.grey,
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // ── Página 1: Ventas ─────────────────────────────────
+                StreamBuilder<List<IncomeSale>>(
+                  stream: context.read<IncomeProvider>().salesForDay(today),
+                  builder: (ctx, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF10B981),
                         ),
-                        SizedBox(height: 12),
-                        Text(
-                          'No hay ventas registradas hoy',
-                          style: TextStyle(color: Colors.grey),
+                      );
+                    }
+                    final sales = snap.data ?? [];
+                    if (sales.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.receipt_long_outlined,
+                              size: 60,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              'No hay ventas registradas hoy',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 4,
-                  ),
-                  itemCount: sales.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 10),
-                  itemBuilder: (context, i) => _SaleTile(sale: sales[i]),
-                );
-              },
+                      );
+                    }
+                    return ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
+                      ),
+                      itemCount: sales.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) => _SaleTile(sale: sales[i]),
+                    );
+                  },
+                ),
+
+                // ── Página 2: Abonos ─────────────────────────────────
+                StreamBuilder<List<IncomePayment>>(
+                  stream: context.read<IncomeProvider>().paymentsForDay(today),
+                  builder: (ctx, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF3B82F6),
+                        ),
+                      );
+                    }
+                    final payments = snap.data ?? [];
+                    if (payments.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.handshake_outlined,
+                              size: 60,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              'No hay abonos registrados hoy',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
+                      ),
+                      itemCount: payments.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) => _PaymentTile(payment: payments[i]),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ],
@@ -237,6 +319,8 @@ class _SaleTile extends StatelessWidget {
         return const Color(0xFFEF4444);
       case PaymentType.nequi:
         return const Color(0xFF8B5CF6);
+      case PaymentType.transferencia:
+        return const Color(0xFF06B6D4); // Cyan
     }
   }
 
@@ -310,6 +394,92 @@ class _SaleTile extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
                   color: Color(0xFF1E1B4B),
+                ),
+              ),
+              Text(
+                time,
+                style: const TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentTile extends StatelessWidget {
+  final IncomePayment payment;
+  const _PaymentTile({required this.payment});
+
+  @override
+  Widget build(BuildContext context) {
+    final formatted = NumberFormat.currency(
+      locale: 'es_CO',
+      symbol: '\$',
+      decimalDigits: 0,
+    ).format(payment.amount);
+    final time = DateFormat('hh:mm a').format(payment.date);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.handshake_outlined,
+              color: Color(0xFF3B82F6),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  payment.clientName.isNotEmpty
+                      ? payment.clientName
+                      : 'Cliente general',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                if (payment.notes != null && payment.notes!.isNotEmpty)
+                  Text(
+                    payment.notes!,
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                formatted,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: Color(0xFF3B82F6),
                 ),
               ),
               Text(

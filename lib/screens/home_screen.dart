@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/auth_service.dart';
 import '../widgets/module_card.dart';
 import 'income/income_screen.dart';
 import 'bills/bills_screen.dart';
@@ -96,6 +98,23 @@ class HomeScreen extends StatelessWidget {
                           ],
                         ),
                       ),
+                      // Botón de perfil
+                      GestureDetector(
+                        onTap: () => _showProfileSheet(context),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.person_outline_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -126,7 +145,9 @@ class HomeScreen extends StatelessWidget {
                       color: const Color(0xFFF2D51D),
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const ShoppingScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const ShoppingScreen(),
+                        ),
                       ),
                     ),
                     ModuleCard(
@@ -160,13 +181,94 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    ModuleCard(
-                      icon: Icons.settings_suggest_rounded,
-                      label: 'CONFIGURACIÓN',
-                      color: const Color(0xFF6B7280),
-                      enabled: false,
-                    ),
                   ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showProfileSheet(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final authService = AuthService();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF4F6F9),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.person_rounded,
+                color: Colors.white,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              user?.email ?? 'Sin correo',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1E1B4B),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'UID: ${user?.uid.substring(0, 8) ?? '---'}...',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await authService.logout();
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                },
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text(
+                  'Cerrar sesión',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEF4444),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 0,
                 ),
               ),
             ),

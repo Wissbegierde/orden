@@ -161,6 +161,27 @@ class IncomeProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> cleanOldCreditSales() async {
+    try {
+      final snap = await _db
+          .collection('ventas')
+          .where('paymentType', isEqualTo: 'credito')
+          .get();
+      int count = 0;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final clientName = data['clientName'] as String?;
+        if (clientName != 'Pedro Aponte') {
+          await doc.reference.delete();
+          count++;
+        }
+      }
+      print('=== DELETED $count OLD CREDIT SALES ===');
+    } catch (e) {
+      print('Error cleaning: $e');
+    }
+  }
+
   // ── Reportes ──────────────────────────────────────────────────
   Future<List<IncomeSale>> fetchSalesForRange(
     DateTime from,

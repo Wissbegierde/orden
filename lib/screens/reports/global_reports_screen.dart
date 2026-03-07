@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/income_sale.dart' as inc;
-import '../../models/income_payment.dart';
 import '../../models/bill.dart' as bills;
 import '../../models/shopping.dart' as shop;
 import '../../providers/income_provider.dart';
@@ -24,7 +23,6 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
   ReportPeriod _period = ReportPeriod.daily;
 
   List<inc.IncomeSale> _sales = [];
-  List<IncomePayment> _incomePayments = [];
   List<bills.Bill> _bills = [];
   List<bills.BillPayment> _billPayments = [];
   List<shop.Shopping> _shoppings = [];
@@ -65,7 +63,6 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
 
     final results = await Future.wait([
       incomeProvider.fetchSalesForRange(from, to),
-      incomeProvider.fetchPaymentsForRange(from, to),
       billsProvider.fetchBillsForRange(from, to),
       billsProvider.fetchPaymentsForRange(from, to),
       shoppingProvider.fetchShoppingsForRange(from, to),
@@ -74,11 +71,10 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
 
     setState(() {
       _sales = results[0] as List<inc.IncomeSale>;
-      _incomePayments = results[1] as List<IncomePayment>;
-      _bills = results[2] as List<bills.Bill>;
-      _billPayments = results[3] as List<bills.BillPayment>;
-      _shoppings = results[4] as List<shop.Shopping>;
-      _shoppingPayments = results[5] as List<shop.ShoppingPayment>;
+      _bills = results[1] as List<bills.Bill>;
+      _billPayments = results[2] as List<bills.BillPayment>;
+      _shoppings = results[3] as List<shop.Shopping>;
+      _shoppingPayments = results[4] as List<shop.ShoppingPayment>;
       _loading = false;
     });
   }
@@ -106,6 +102,7 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
           foregroundColor: Colors.white,
           elevation: 0,
           title: const Text('Reportes Generales'),
+
           bottom: const TabBar(
             indicatorColor: Colors.white,
             labelColor: Colors.white,
@@ -180,8 +177,7 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
         .where((g) => g.paymentType == bills.PaymentType.efectivo)
         .fold<double>(0.0, (sum, g) => sum + g.amount);
 
-    final totalCaja =
-        ingresosEfectivo - comprasEfectivo - gastosEfectivo;
+    final totalCaja = ingresosEfectivo - comprasEfectivo - gastosEfectivo;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -250,32 +246,20 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
     final creditByClient = <String, double>{};
     for (final sale in _sales) {
       if (sale.paymentType != inc.PaymentType.credito) continue;
-      final client = (sale.clientName ?? 'Sin cliente').trim();
-      creditByClient[client] = (creditByClient[client] ?? 0) + sale.amount;
+
+      final pending = sale.pendingAmount ?? sale.amount;
+      if (pending <= 0) continue;
+
+      final client = (sale.clientName?.trim().isNotEmpty == true)
+          ? sale.clientName!.trim()
+          : 'Sin cliente';
+
+      creditByClient[client] = (creditByClient[client] ?? 0) + pending;
     }
 
-    final paymentsByClient = <String, double>{};
-    for (final p in _incomePayments) {
-      final client = p.clientName.trim().isEmpty
-          ? 'Sin cliente'
-          : p.clientName.trim();
-      paymentsByClient[client] = (paymentsByClient[client] ?? 0) + p.amount;
-    }
-
-    final entries = <_BalanceEntry>[];
-    final clients = {
-      ...creditByClient.keys,
-      ...paymentsByClient.keys,
-    };
-
-    for (final client in clients) {
-      final credit = creditByClient[client] ?? 0;
-      final paid = paymentsByClient[client] ?? 0;
-      final balance = credit - paid;
-      if (balance > 0) {
-        entries.add(_BalanceEntry(name: client, balance: balance));
-      }
-    }
+    final entries = creditByClient.entries
+        .map((e) => _BalanceEntry(name: e.key, balance: e.value))
+        .toList();
 
     entries.sort((a, b) => b.balance.compareTo(a.balance));
 
@@ -333,10 +317,11 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
     final creditPurchasesByProvider = <String, double>{};
     for (final s in _shoppings) {
       if (s.paymentType != shop.PaymentType.credito) continue;
-      final key = (s.providerName?.trim().isNotEmpty == true
-              ? s.providerName!
-              : s.description)
-          .trim();
+      final key =
+          (s.providerName?.trim().isNotEmpty == true
+                  ? s.providerName!
+                  : s.description)
+              .trim();
       creditPurchasesByProvider[key] =
           (creditPurchasesByProvider[key] ?? 0) + s.amount;
     }
@@ -349,10 +334,11 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
     for (final p in _shoppingPayments) {
       final s = shoppingById[p.shoppingId];
       if (s == null || s.paymentType != shop.PaymentType.credito) continue;
-      final key = (s.providerName?.trim().isNotEmpty == true
-              ? s.providerName!
-              : s.description)
-          .trim();
+      final key =
+          (s.providerName?.trim().isNotEmpty == true
+                  ? s.providerName!
+                  : s.description)
+              .trim();
       paymentsPurchasesByProvider[key] =
           (paymentsPurchasesByProvider[key] ?? 0) + p.amount;
     }
@@ -375,12 +361,12 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
     // Gastos (pendientes según pagos realizados)
     final creditBillsByProvider = <String, double>{};
     for (final b in _bills) {
-      final key = (b.providerName?.trim().isNotEmpty == true
-              ? b.providerName!
-              : b.description)
-          .trim();
-      creditBillsByProvider[key] =
-          (creditBillsByProvider[key] ?? 0) + b.amount;
+      final key =
+          (b.providerName?.trim().isNotEmpty == true
+                  ? b.providerName!
+                  : b.description)
+              .trim();
+      creditBillsByProvider[key] = (creditBillsByProvider[key] ?? 0) + b.amount;
     }
 
     final billById = <String, bills.Bill>{};
@@ -391,10 +377,11 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
     for (final p in _billPayments) {
       final b = billById[p.billId];
       if (b == null) continue;
-      final key = (b.providerName?.trim().isNotEmpty == true
-              ? b.providerName!
-              : b.description)
-          .trim();
+      final key =
+          (b.providerName?.trim().isNotEmpty == true
+                  ? b.providerName!
+                  : b.description)
+              .trim();
       paymentsBillsByProvider[key] =
           (paymentsBillsByProvider[key] ?? 0) + p.amount;
     }
@@ -498,12 +485,9 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
       );
     }
 
-    final totalIngresos =
-        _sales.fold<double>(0.0, (sum, s) => sum + s.amount);
-    final totalCosto =
-        _shoppings.fold<double>(0.0, (sum, c) => sum + c.amount);
-    final totalGastos =
-        _bills.fold<double>(0.0, (sum, g) => sum + g.amount);
+    final totalIngresos = _sales.fold<double>(0.0, (sum, s) => sum + s.amount);
+    final totalCosto = _shoppings.fold<double>(0.0, (sum, c) => sum + c.amount);
+    final totalGastos = _bills.fold<double>(0.0, (sum, g) => sum + g.amount);
     final utilidad = totalIngresos - totalCosto - totalGastos;
 
     return SingleChildScrollView(
@@ -591,9 +575,7 @@ class _PeriodChip extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(
-          color: selected
-              ? const Color(0xFFF59E0B)
-              : Colors.grey.shade300,
+          color: selected ? const Color(0xFFF59E0B) : Colors.grey.shade300,
         ),
       ),
     );
@@ -631,17 +613,11 @@ class _CashFlowRow extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF1E1B4B),
-            ),
+            style: const TextStyle(fontSize: 13, color: Color(0xFF1E1B4B)),
           ),
         ),
         const SizedBox(width: 12),
-        Text(
-          '${prefix ?? ''} ${currency.format(amount)}',
-          style: textStyle,
-        ),
+        Text('${prefix ?? ''} ${currency.format(amount)}', style: textStyle),
       ],
     );
   }
@@ -677,17 +653,11 @@ class _IncomeRow extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF1E1B4B),
-            ),
+            style: const TextStyle(fontSize: 13, color: Color(0xFF1E1B4B)),
           ),
         ),
         const SizedBox(width: 12),
-        Text(
-          '${prefix ?? ''} ${currency.format(amount)}',
-          style: style,
-        ),
+        Text('${prefix ?? ''} ${currency.format(amount)}', style: style),
       ],
     );
   }
@@ -752,14 +722,10 @@ class _BalanceTile extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             currency.format(amount),
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: color),
           ),
         ],
       ),
     );
   }
 }
-

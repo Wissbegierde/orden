@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/custom_text_field.dart';
@@ -13,11 +14,10 @@ import '../widgets/section_label.dart';
 
 /// Pantalla de registro de nuevo usuario.
 ///
-/// Incluye:
-/// - Indicador de fortaleza de contraseña en tiempo real.
-/// - Revalidación inmediata del campo de confirmación al cambiar la contraseña.
-/// - Navegación de foco con teclado entre los 6 campos.
-/// - FocusNodes gestionados correctamente para evitar memory leaks.
+/// **Cambios respecto a la versión anterior:**
+/// - La contraseña se pasa directamente al provider sin transformaciones.
+/// - La confirmación valida contra el texto exacto (sin trim).
+/// - El validador de contraseña exige mínimo 8 caracteres (antes 6).
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -43,7 +43,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passFocus = FocusNode();
   final _confirmFocus = FocusNode();
 
-  // Para actualizar el indicador de fortaleza sin reconstruir toda la pantalla
   String _passwordActual = '';
 
   @override
@@ -72,6 +71,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     await context.read<AuthProvider>().registrar(
           nombre: _nombreCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
+          // ✅ Sin trim() en la contraseña
           password: _passCtrl.text,
           telefono: _telefonoCtrl.text.trim(),
           negocio: _negocioCtrl.text.trim(),
@@ -88,7 +88,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         behavior: HitTestBehavior.opaque,
         child: Column(
           children: [
-            // ── Header con botón volver ──
             Stack(
               children: [
                 const AuthHeader(
@@ -139,7 +138,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
 
-                      // ─── Datos personales ───────────────────────
+                      // ─── Datos personales ───────────────────────────────
                       const SectionLabel('Datos personales'),
                       const SizedBox(height: 12),
 
@@ -176,7 +175,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // ─── Negocio ────────────────────────────────
+                      // ─── Negocio ─────────────────────────────────────────
                       const SectionLabel('Tu negocio'),
                       const SizedBox(height: 12),
 
@@ -193,7 +192,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // ─── Datos de acceso ────────────────────────
+                      // ─── Datos de acceso ──────────────────────────────────
                       const SectionLabel('Datos de acceso'),
                       const SizedBox(height: 12),
 
@@ -213,7 +212,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Contraseña + indicador de fortaleza
                       CustomTextField(
                         controller: _passCtrl,
                         focusNode: _passFocus,
@@ -224,11 +222,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         autofillHints: const [AutofillHints.newPassword],
                         onChanged: (val) {
                           setState(() => _passwordActual = val);
-                          // Revalidar el campo de confirmación al cambiar la contraseña
                           _confirmFieldKey.currentState?.validate();
                         },
                         onFieldSubmitted: (_) =>
                             FocusScope.of(context).requestFocus(_confirmFocus),
+                        // ✅ Mínimo 8 caracteres (antes 6)
                         validator: Validators.passwordRegistro,
                       ),
                       PasswordStrengthIndicator(password: _passwordActual),
@@ -244,11 +242,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         textInputAction: TextInputAction.done,
                         autofillHints: const [AutofillHints.newPassword],
                         onFieldSubmitted: (_) => _registrar(),
+                        // ✅ Comparación exacta sin trim()
                         validator: Validators.confirmarPassword(_passCtrl.text),
                       ),
                       const SizedBox(height: 32),
 
-                      // ── Botón crear cuenta ──
                       Consumer<AuthProvider>(
                         builder: (_, auth, __) => PrimaryButton(
                           text: 'Crear cuenta',
@@ -258,7 +256,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // ── Volver al login ──
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         style: TextButton.styleFrom(

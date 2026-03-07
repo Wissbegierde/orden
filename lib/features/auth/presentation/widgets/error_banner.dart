@@ -3,8 +3,7 @@ import '../../../../core/constants/app_colors.dart';
 
 /// Banner de error animado que se muestra en la parte superior de los formularios.
 ///
-/// Soporta un botón de cierre opcional que invoca [onDismiss].
-/// La animación de entrada evita el "pop-in" brusco al aparecer.
+/// Actualizado: usa [Color.withValues(alpha:)] en lugar de [withOpacity()] (deprecado).
 class ErrorBanner extends StatelessWidget {
   final String message;
   final VoidCallback? onDismiss;
@@ -19,8 +18,9 @@ class ErrorBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.error.withOpacity(0.08),
-          border: Border.all(color: AppColors.error.withOpacity(0.4)),
+          // ✅ withValues en lugar de withOpacity
+          color: AppColors.error.withValues(alpha: 0.08),
+          border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(

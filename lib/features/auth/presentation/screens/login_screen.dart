@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/custom_text_field.dart';
@@ -14,8 +15,9 @@ import 'register_screen.dart';
 /// Pantalla de inicio de sesión.
 ///
 /// Flujo: el usuario ingresa credenciales → [AuthProvider.login] →
-/// [AuthWrapper] en main.dart detecta el cambio de estado y navega al Home.
-/// Esta pantalla no navega directamente; delega la decisión al wrapper.
+/// [AuthWrapper] detecta el cambio en el stream y navega al Home.
+/// Esta pantalla no navega directamente; delega al wrapper para
+/// mantener la separación de responsabilidades.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -45,9 +47,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     HapticFeedback.lightImpact();
 
-    // No usamos el resultado bool: AuthWrapper reacciona al stream de Firebase.
     await context.read<AuthProvider>().login(
           email: _emailCtrl.text.trim(),
+          // ✅ Sin trim() en la contraseña — los espacios son parte de ella
           password: _passCtrl.text,
         );
   }

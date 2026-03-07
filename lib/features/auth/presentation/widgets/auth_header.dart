@@ -4,16 +4,10 @@ import '../../../../core/constants/app_colors.dart';
 
 /// Encabezado visual compartido por todas las pantallas de autenticación.
 ///
-/// Muestra el logo de la app, un título y un subtítulo sobre el gradiente
-/// de marca. Se adapta al tamaño de pantalla usando porcentajes de altura.
-///
-/// El [AnnotatedRegion] garantiza que los iconos de la barra de estado
-/// (hora, batería, etc.) sean siempre blancos sobre el gradiente oscuro.
+/// Actualizado: usa [Color.withValues(alpha:)] en lugar del deprecado [withOpacity()].
 class AuthHeader extends StatelessWidget {
   final String titulo;
   final String subtitulo;
-
-  /// [grande] = true para la pantalla de Login (cabecera más alta con logo más grande).
   final bool grande;
 
   const AuthHeader({
@@ -49,11 +43,11 @@ class AuthHeader extends StatelessWidget {
               'assets/logo.png',
               height: screenHeight * (grande ? 0.17 : 0.13),
               fit: BoxFit.contain,
-              // Fallback gracioso si el asset no existe en el entorno de desarrollo
               errorBuilder: (_, __, ___) => Icon(
                 Icons.store_outlined,
                 size: screenHeight * (grande ? 0.10 : 0.08),
-                color: Colors.white.withOpacity(0.9),
+                // ✅ withValues en lugar de withOpacity (deprecado en Flutter 3.x)
+                color: Colors.white.withValues(alpha: 0.9),
               ),
             ),
             SizedBox(height: screenHeight * 0.02),
@@ -72,7 +66,8 @@ class AuthHeader extends StatelessWidget {
               subtitulo,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.80),
+                // ✅ withValues en lugar de withOpacity
+                color: Colors.white.withValues(alpha: 0.80),
                 fontSize: 14,
               ),
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/custom_text_field.dart';
@@ -14,8 +15,11 @@ import '../widgets/error_banner.dart';
 /// Flujo:
 /// 1. El usuario ingresa su correo y pulsa "Enviar correo".
 /// 2. [AuthProvider.recuperarPassword] invoca Firebase.
-/// 3. Si el correo es exitoso, se muestra [_mensajeExito] en la misma pantalla.
-/// 4. El usuario vuelve al login desde el botón de la pantalla de éxito.
+/// 3. Éxito: muestra pantalla de confirmación en la misma vista.
+/// 4. El usuario regresa al login desde el botón de la pantalla de éxito.
+///
+/// **Nota de seguridad:** Firebase siempre responde con éxito
+/// (incluso si el email no existe) para evitar enumeración de usuarios.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -157,8 +161,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: AppColors.exito.withOpacity(0.08),
-            border: Border.all(color: AppColors.exito.withOpacity(0.3)),
+            color: AppColors.exito.withValues(alpha: 0.08),
+            border: Border.all(color: AppColors.exito.withValues(alpha: 0.3)),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -178,8 +182,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               Text(
                 'Revisa tu bandeja de entrada en $email y sigue las instrucciones para restablecer tu contraseña.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: AppColors.textoGris, height: 1.5),
+                style:
+                    const TextStyle(color: AppColors.textoGris, height: 1.5),
               ),
               const SizedBox(height: 12),
               const Text(

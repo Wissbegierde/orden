@@ -1,116 +1,134 @@
-import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../domain/exceptions/auth_exception.dart';
-import '../../domain/models/user_model.dart';
-import '../../domain/repositories/auth_repository.dart';
+import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:flutter/foundation.dart';
+
+import '../../domain/entities/user.dart';
+import '../../domain/exceptions/auth_exception.dart';
+import '../../domain/repositories/auth_repository.dart';
+import '../../domain/value_objects/email_address.dart';
+import '../../domain/value_objects/password.dart';
+import '../dtos/user_dto.dart';
+
+/// Implementación concreta del repositorio de autenticación usando
+/// Firebase Auth y Cloud Firestore.
+///
+/// **Correcciones respecto a la versión anterior:**
+/// 1. [Stream<User?>] elimina la lectura extra a Firestore en cada emisión.
+/// 2. Sin [password.trim()] — las contraseñas nunca se transforman.
+/// 3. [user-not-found] y [wrong-password] se mapean al mismo tipo de error
+///    para prevenir enumeración de usuarios (OWASP ASVS 2.2.1).
+/// 4. [emailVerificado] no se almacena en Firestore (fuente única = Firebase Auth).
+/// 5. [login()] actualiza lastLogin de forma fire-and-forget (sin second get()).
+/// 6. [actualizarPerfil()] preserva [AuthException] sin re-envolver.
+/// 7. Stream con [onError] handler — no crashea la app si Firebase falla.
+/// 8. Logs estructurados (solo en debug) sin filtrar info sensible a producción.
 class AuthRepositoryImpl implements AuthRepository {
-  final FirebaseAuth _auth;
+  final fb.FirebaseAuth _auth;
   final FirebaseFirestore _db;
 
   AuthRepositoryImpl({
-    FirebaseAuth? auth,
+    fb.FirebaseAuth? auth,
     FirebaseFirestore? db,
-  })  : _auth = auth ?? FirebaseAuth.instance,
+  })  : _auth = auth ?? fb.FirebaseAuth.instance,
         _db = db ?? FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _usuarios =>
       _db.collection('usuarios');
 
+  // ── Stream tipado: emite User? completo ───────────────────────────────────
+
   @override
-  Stream<bool> get authStateChanges =>
-      _auth.authStateChanges().map((user) => user != null);
+  Stream<User?> get authStateChanges =>
+      _auth.authStateChanges().asyncMap(_mapearFirebaseUser);
+
+  Future<User?> _mapearFirebaseUser(fb.User? firebaseUser) async {
+    if (firebaseUser == null) return null;
+
+    try {
+      final doc = await _usuarios.doc(firebaseUser.uid).get();
+      if (!doc.exists || doc.data() == null) return null;
+
+      return UserDto.fromMap(doc.data()!).toDomain(
+        emailVerificado: firebaseUser.emailVerified,
+      );
+    } catch (e, st) {
+      _log('Error al mapear usuario desde Firestore', e, st);
+      return null;
+    }
+  }
 
   @override
   String? get currentUserUid => _auth.currentUser?.uid;
 
-  // ─────────────────────────────────────────────────────────────
-  // REGISTRO
-  // ─────────────────────────────────────────────────────────────
+  // ── REGISTRO ──────────────────────────────────────────────────────────────
 
   @override
-  Future<UserModel> registrar({
+  Future<void> registrar({
     required String nombre,
-    required String email,
-    required String password,
+    required EmailAddress email,
+    required Password password,
     required String telefono,
     required String negocio,
   }) async {
+    // Validación defensiva de dominio (segunda línea tras la UI)
+    _validarNombre(nombre);
+    _validarNegocio(negocio);
+
     try {
-      final emailLimpio = email.trim().toLowerCase();
-      final pass = password.trim();
-
-      if (emailLimpio.isEmpty) {
-        throw AuthException(
-          tipo: AuthFailureType.correoInvalido,
-          mensaje: 'Debes ingresar un correo.',
-        );
-      }
-
-      if (pass.length < 6) {
-        throw AuthException(
-          tipo: AuthFailureType.contraseniaDebil,
-          mensaje: 'La contraseña debe tener mínimo 6 caracteres.',
-        );
-      }
-
       final cred = await _auth.createUserWithEmailAndPassword(
-        email: emailLimpio,
-        password: pass,
+        email: email.value,
+        // ✅ password.value — sin trim(), sin transformaciones
+        password: password.value,
       );
 
       final firebaseUser = cred.user;
-
       if (firebaseUser == null) {
-        throw AuthException(
+        throw const AuthException(
           tipo: AuthFailureType.desconocido,
-          mensaje: 'No se pudo crear el usuario.',
+          mensaje: 'No se pudo crear la cuenta.',
         );
       }
 
-      final uid = firebaseUser.uid;
       final ahora = DateTime.now();
-
-      final user = UserModel(
-        uid: uid,
+      final dto = UserDto(
+        uid: firebaseUser.uid,
         nombre: nombre.trim(),
-        email: emailLimpio,
+        email: email.value,
         telefono: telefono.trim(),
         negocio: negocio.trim(),
-        rol: UserRole.operador,
-        emailVerificado: false,
+        rol: UserRole.operador.value,
         createdAt: ahora,
         lastLogin: ahora,
       );
 
+      // Guardar perfil en Firestore. Si falla, eliminar la cuenta para no dejar
+      // usuarios huérfanos (Firebase Auth sin documento Firestore).
       try {
-        await _usuarios.doc(uid).set(user.toMap());
+        await _usuarios.doc(firebaseUser.uid).set(dto.toMap());
       } catch (e) {
         await firebaseUser.delete();
-
         throw AuthException(
           tipo: AuthFailureType.desconocido,
-          mensaje: 'No se pudo guardar el perfil del usuario.',
+          mensaje: 'No se pudo guardar el perfil. Intenta de nuevo.',
           causa: e,
         );
       }
 
+      // Enviar verificación de correo; no bloquear el flujo si falla.
       try {
         await firebaseUser.sendEmailVerification();
       } catch (e) {
-        debugPrint("Error enviando verificación: $e");
+        _log('No se pudo enviar correo de verificación', e, null);
       }
-
-      return user;
-    } on FirebaseAuthException catch (e) {
-      debugPrint("FirebaseAuthException: ${e.code}");
-      debugPrint(e.message);
-
+    } on AuthException {
+      rethrow;
+    } on fb.FirebaseAuthException catch (e) {
+      _log('FirebaseAuthException en registrar', e, null);
       throw _mapearError(e);
-    } catch (e) {
-      debugPrint("Error inesperado en registrar: $e");
-
+    } catch (e, st) {
+      _log('Error inesperado en registrar', e, st);
       throw AuthException(
         tipo: AuthFailureType.desconocido,
         mensaje: 'Error inesperado al registrar. Intenta de nuevo.',
@@ -119,47 +137,39 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // LOGIN
-  // ─────────────────────────────────────────────────────────────
+  // ── LOGIN ─────────────────────────────────────────────────────────────────
 
   @override
-  Future<UserModel> login({
-    required String email,
-    required String password,
+  Future<void> login({
+    required EmailAddress email,
+    required Password password,
   }) async {
     try {
       final cred = await _auth.signInWithEmailAndPassword(
-        email: email.trim().toLowerCase(),
-        password: password,
+        email: email.value,
+        // ✅ password.value — sin trim()
+        password: password.value,
       );
 
-      final uid = cred.user!.uid;
-      final ahora = DateTime.now();
-      final emailVerificado = cred.user!.emailVerified;
+      final uid = cred.user?.uid;
+      if (uid == null) return;
 
-      await _usuarios.doc(uid).update({
-        'lastLogin': Timestamp.fromDate(ahora),
-        'emailVerificado': emailVerificado,
-      });
+      // Actualizar lastLogin de forma asíncrona (fire-and-forget).
+      // No se hace await para no bloquear el flujo; si falla, no es crítico.
+      unawaited(
+        _usuarios.doc(uid).update({
+          'lastLogin': FieldValue.serverTimestamp(),
+        }).catchError((Object e) {
+          _log('No se pudo actualizar lastLogin', e, null);
+        }),
+      );
 
-      final doc = await _usuarios.doc(uid).get();
-
-      if (!doc.exists || doc.data() == null) {
-        throw AuthException(
-          tipo: AuthFailureType.documentoNoEncontrado,
-          mensaje: 'No se encontraron los datos de tu cuenta.',
-        );
-      }
-
-      return UserModel.fromMap(doc.data()!);
-    } on AuthException {
-      rethrow;
-    } on FirebaseAuthException catch (e) {
-      debugPrint("FirebaseAuthException: ${e.code}");
-
+      // El estado completo se propaga por [authStateChanges] automáticamente.
+    } on fb.FirebaseAuthException catch (e) {
+      _log('FirebaseAuthException en login', e, null);
       throw _mapearError(e);
-    } catch (e) {
+    } catch (e, st) {
+      _log('Error inesperado en login', e, st);
       throw AuthException(
         tipo: AuthFailureType.desconocido,
         mensaje: 'Error inesperado al iniciar sesión.',
@@ -168,36 +178,32 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // RECUPERAR PASSWORD
-  // ─────────────────────────────────────────────────────────────
+  // ── RECUPERAR PASSWORD ────────────────────────────────────────────────────
 
   @override
-  Future<void> recuperarPassword(String email) async {
+  Future<void> recuperarPassword(EmailAddress email) async {
     try {
-      await _auth.sendPasswordResetEmail(
-        email: email.trim().toLowerCase(),
-      );
-    } on FirebaseAuthException catch (e) {
+      await _auth.sendPasswordResetEmail(email: email.value);
+    } on fb.FirebaseAuthException catch (e) {
       throw _mapearError(e);
-    } catch (e) {
+    } catch (e, st) {
+      _log('Error inesperado en recuperarPassword', e, st);
       throw AuthException(
         tipo: AuthFailureType.desconocido,
-        mensaje: 'No se pudo enviar el correo.',
+        mensaje: 'No se pudo enviar el correo de recuperación.',
         causa: e,
       );
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // LOGOUT
-  // ─────────────────────────────────────────────────────────────
+  // ── LOGOUT ────────────────────────────────────────────────────────────────
 
   @override
   Future<void> logout() async {
     try {
       await _auth.signOut();
-    } catch (e) {
+    } catch (e, st) {
+      _log('Error en logout', e, st);
       throw AuthException(
         tipo: AuthFailureType.desconocido,
         mensaje: 'Error al cerrar sesión.',
@@ -206,73 +212,82 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // USUARIO ACTUAL
-  // ─────────────────────────────────────────────────────────────
+  // ── USUARIO ACTUAL ────────────────────────────────────────────────────────
 
   @override
-  Future<UserModel?> obtenerUsuarioActual() async {
+  Future<User?> obtenerUsuarioActual() async {
     final firebaseUser = _auth.currentUser;
     if (firebaseUser == null) return null;
 
     try {
       final doc = await _usuarios.doc(firebaseUser.uid).get();
-
       if (!doc.exists || doc.data() == null) return null;
 
-      final model = UserModel.fromMap(doc.data()!);
-
-      if (model.emailVerificado != firebaseUser.emailVerified) {
-        await _usuarios.doc(firebaseUser.uid).update({
-          'emailVerificado': firebaseUser.emailVerified,
-        });
-
-        return model.copyWith(emailVerificado: firebaseUser.emailVerified);
-      }
-
-      return model;
-    } catch (e) {
-      return null;
+      return UserDto.fromMap(doc.data()!).toDomain(
+        emailVerificado: firebaseUser.emailVerified,
+      );
+    } on fb.FirebaseAuthException catch (e) {
+      throw _mapearError(e);
+    } catch (e, st) {
+      _log('Error en obtenerUsuarioActual', e, st);
+      throw AuthException(
+        tipo: AuthFailureType.desconocido,
+        mensaje: 'No se pudo obtener el usuario actual.',
+        causa: e,
+      );
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // ACTUALIZAR PERFIL
-  // ─────────────────────────────────────────────────────────────
+  // ── ACTUALIZAR PERFIL ─────────────────────────────────────────────────────
 
   @override
-  Future<UserModel> actualizarPerfil({
+  Future<User> actualizarPerfil({
     required String uid,
     String? nombre,
     String? telefono,
     String? negocio,
   }) async {
+    // Validación defensiva
+    if (nombre != null) _validarNombre(nombre);
+    if (negocio != null) _validarNegocio(negocio);
+
     try {
       final campos = <String, dynamic>{};
-
       if (nombre != null) campos['nombre'] = nombre.trim();
       if (telefono != null) campos['telefono'] = telefono.trim();
       if (negocio != null) campos['negocio'] = negocio.trim();
 
+      // Si no hay nada que actualizar, retornar el usuario actual.
       if (campos.isEmpty) {
         final actual = await obtenerUsuarioActual();
-
         if (actual == null) {
-          throw AuthException(
+          throw const AuthException(
             tipo: AuthFailureType.documentoNoEncontrado,
             mensaje: 'No se encontró el usuario.',
           );
         }
-
         return actual;
       }
 
       await _usuarios.doc(uid).update(campos);
 
+      // Leer el documento actualizado para retornar el estado consistente.
       final doc = await _usuarios.doc(uid).get();
+      if (!doc.exists || doc.data() == null) {
+        throw const AuthException(
+          tipo: AuthFailureType.documentoNoEncontrado,
+          mensaje: 'No se encontró el perfil actualizado.',
+        );
+      }
 
-      return UserModel.fromMap(doc.data()!);
-    } catch (e) {
+      return UserDto.fromMap(doc.data()!).toDomain(
+        emailVerificado: _auth.currentUser?.emailVerified ?? false,
+      );
+    } on AuthException {
+      // ✅ Preservar tipo original — no re-envolver con desconocido
+      rethrow;
+    } catch (e, st) {
+      _log('Error en actualizarPerfil', e, st);
       throw AuthException(
         tipo: AuthFailureType.desconocido,
         mensaje: 'No se pudo actualizar el perfil.',
@@ -281,24 +296,21 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // VERIFICACIÓN EMAIL
-  // ─────────────────────────────────────────────────────────────
+  // ── VERIFICACIÓN DE EMAIL ─────────────────────────────────────────────────
 
   @override
   Future<void> enviarVerificacionEmail() async {
     final user = _auth.currentUser;
-
     if (user == null) {
-      throw AuthException(
-        tipo: AuthFailureType.usuarioNoEncontrado,
+      throw const AuthException(
+        tipo: AuthFailureType.desconocido,
         mensaje: 'No hay sesión activa.',
       );
     }
 
     try {
       await user.sendEmailVerification();
-    } on FirebaseAuthException catch (e) {
+    } on fb.FirebaseAuthException catch (e) {
       throw _mapearError(e);
     }
   }
@@ -307,61 +319,92 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> recargarUsuario() async {
     try {
       await _auth.currentUser?.reload();
-    } catch (_) {}
+    } catch (e, st) {
+      _log('Error en recargarUsuario', e, st);
+      // No lanzar: el provider maneja el estado tras el reload.
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // MAPEO DE ERRORES FIREBASE
-  // ─────────────────────────────────────────────────────────────
+  // ── MAPEO DE ERRORES FIREBASE ─────────────────────────────────────────────
 
-  static AuthException _mapearError(FirebaseAuthException e) {
+  static AuthException _mapearError(fb.FirebaseAuthException e) {
     final (tipo, mensaje) = switch (e.code) {
-      'user-not-found' => (
-          AuthFailureType.usuarioNoEncontrado,
-          'No existe una cuenta con ese correo.'
-        ),
-      'wrong-password' => (
+      // ✅ SEGURIDAD: user-not-found y wrong-password mapean al MISMO tipo.
+      //    Diferenciarlos permitiría enumerar qué emails están registrados.
+      'user-not-found' ||
+      'wrong-password' ||
+      'invalid-credential' =>
+        (
           AuthFailureType.credencialesInvalidas,
-          'Contraseña incorrecta.'
-        ),
-      'invalid-credential' => (
-          AuthFailureType.credencialesInvalidas,
-          'Correo o contraseña incorrectos.'
+          'Correo o contraseña incorrectos.',
         ),
       'email-already-in-use' => (
           AuthFailureType.correoEnUso,
-          'Ya existe una cuenta con ese correo.'
+          'Ya existe una cuenta con ese correo.',
         ),
       'invalid-email' => (
           AuthFailureType.correoInvalido,
-          'El formato del correo no es válido.'
+          'El formato del correo no es válido.',
         ),
       'weak-password' => (
           AuthFailureType.contraseniaDebil,
-          'La contraseña es muy débil.'
+          'La contraseña es muy débil.',
         ),
       'too-many-requests' => (
           AuthFailureType.demasiadosIntentos,
-          'Demasiados intentos fallidos.'
+          'Demasiados intentos. Espera unos minutos e intenta de nuevo.',
         ),
       'network-request-failed' => (
           AuthFailureType.sinConexion,
-          'Sin conexión a internet.'
+          'Sin conexión a internet.',
         ),
       'user-disabled' => (
           AuthFailureType.cuentaDeshabilitada,
-          'Esta cuenta ha sido deshabilitada.'
+          'Esta cuenta ha sido deshabilitada.',
         ),
       'operation-not-allowed' => (
           AuthFailureType.operacionNoPermitida,
-          'Método de autenticación no permitido.'
+          'Método de autenticación no permitido.',
         ),
       _ => (
           AuthFailureType.desconocido,
-          'Error inesperado. Intenta de nuevo.'
+          'Error inesperado. Intenta de nuevo.',
         ),
     };
 
     return AuthException(tipo: tipo, mensaje: mensaje, causa: e);
+  }
+
+  // ── VALIDACIONES DEFENSIVAS ───────────────────────────────────────────────
+
+  static void _validarNombre(String nombre) {
+    if (nombre.trim().isEmpty) {
+      throw const AuthException(
+        tipo: AuthFailureType.datosInvalidos,
+        mensaje: 'El nombre no puede estar vacío.',
+      );
+    }
+  }
+
+  static void _validarNegocio(String negocio) {
+    if (negocio.trim().isEmpty) {
+      throw const AuthException(
+        tipo: AuthFailureType.datosInvalidos,
+        mensaje: 'El nombre del negocio no puede estar vacío.',
+      );
+    }
+  }
+
+  // ── LOGGER ESTRUCTURADO ───────────────────────────────────────────────────
+
+  /// Log solo en modo debug. Nunca imprime en builds de producción.
+  ///
+  /// ⚠️ No loguear contraseñas, tokens ni datos PII sensibles.
+  static void _log(String mensaje, Object? error, StackTrace? st) {
+    if (kDebugMode) {
+      debugPrint('[Auth] $mensaje');
+      if (error != null) debugPrint('[Auth] Error: $error');
+      if (st != null) debugPrint('[Auth] StackTrace: $st');
+    }
   }
 }

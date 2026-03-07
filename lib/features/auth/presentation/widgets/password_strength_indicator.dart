@@ -24,7 +24,6 @@ extension _FortalezaExt on _Fortaleza {
         _Fortaleza.muyFuerte => const Color(0xFF059669),
       };
 
-  /// Cuántos de los 4 segmentos se muestran activos.
   int get segmentosActivos => switch (this) {
         _Fortaleza.vacia => 0,
         _Fortaleza.debil => 1,
@@ -42,11 +41,12 @@ _Fortaleza _calcularFortaleza(String password) {
   if (password.isEmpty) return _Fortaleza.vacia;
 
   int puntos = 0;
+  // ✅ Umbral base aumentado a 8 (en línea con la nueva política mínima)
   if (password.length >= 8) puntos++;
   if (password.length >= 12) puntos++;
   if (password.contains(RegExp(r'[A-Z]'))) puntos++;
   if (password.contains(RegExp(r'[0-9]'))) puntos++;
-  if (password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-+=\[\]\\\/]'))) {
+  if (password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-+=\[\]\\/]'))) {
     puntos++;
   }
 
@@ -62,14 +62,9 @@ _Fortaleza _calcularFortaleza(String password) {
 //  Widget
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Barra visual que indica la fortaleza de la contraseña en tiempo real.
+/// Barra visual de fortaleza de contraseña en tiempo real.
 ///
-/// Uso:
-/// ```dart
-/// PasswordStrengthIndicator(password: _passCtrl.text),
-/// ```
-/// Se coloca debajo del campo de contraseña y se actualiza con cada pulsación
-/// usando [Consumer] o [ValueListenableBuilder] según el caso.
+/// Actualizado: usa [Color.withValues(alpha:)] en lugar de [withOpacity()].
 class PasswordStrengthIndicator extends StatelessWidget {
   final String password;
 
@@ -85,7 +80,6 @@ class PasswordStrengthIndicator extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Barra segmentada
           Row(
             children: List.generate(4, (i) {
               final activo = i < fortaleza.segmentosActivos;
@@ -103,7 +97,6 @@ class PasswordStrengthIndicator extends StatelessWidget {
             }),
           ),
           const SizedBox(height: 5),
-          // Etiqueta
           AnimatedDefaultTextStyle(
             duration: const Duration(milliseconds: 200),
             style: TextStyle(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+import 'features/auth/data/repositories/auth_repository_impl.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/email_verification_screen.dart';
@@ -22,7 +23,7 @@ class OrdenApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider(repo: AuthRepositoryImpl())),
         // Aquí se añadirán los providers de los otros módulos:
         // ChangeNotifierProvider(create: (_) => InventoryProvider()),
         // ChangeNotifierProvider(create: (_) => IncomeProvider()),
@@ -153,3 +154,4 @@ class _HomeTemp extends StatelessWidget {
     );
   }
 }
+

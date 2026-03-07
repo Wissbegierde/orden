@@ -1,28 +1,31 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
-import '../../data/repositories/auth_repository_impl.dart';
+
+import '../../domain/entities/user.dart';
 import '../../domain/exceptions/auth_exception.dart';
-import '../../domain/models/user_model.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../domain/value_objects/email_address.dart';
+import '../../domain/value_objects/password.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Estados del ciclo de autenticación
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum AuthStatus {
-  /// Estado inicial: verificando si hay sesión guardada en Firebase.
+  /// Verificando si hay sesión guardada al iniciar la app.
   inicial,
 
-  /// Operación asíncrona en curso (login, registro, etc.).
+  /// Operación asíncrona en curso.
   cargando,
 
-  /// Sesión activa y datos de usuario cargados correctamente.
+  /// Sesión activa y perfil de usuario disponible.
   autenticado,
 
-  /// Sin sesión activa (logout o nunca autenticado).
+  /// Sin sesión activa (logout o primer uso).
   noAutenticado,
 
-  /// Última operación terminó con error; [AuthProvider.errorMessage] contiene el detalle.
+  /// La última operación falló; [AuthProvider.errorMessage] contiene el detalle.
   error,
 }
 
@@ -30,64 +33,82 @@ enum AuthStatus {
 //  Provider
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Gestiona el estado de autenticación y expone las acciones de auth a la UI.
+/// Gestiona el estado global de autenticación y expone acciones a la UI.
 ///
-/// **Garantías**:
-/// - No importa nada de Firebase directamente (solo el repositorio abstracto).
-/// - Cancela la suscripción al stream cuando el provider es destruido (sin memory leaks).
-/// - Todas las operaciones de red manejan [AuthException] y actualizan el estado.
-/// - [limpiarError] permite a la UI resetear el estado de error sin relanzar operaciones.
+/// **Mejoras respecto a la versión anterior:**
+/// - Constructor requiere [AuthRepository] explícito (DI estricta, testeable).
+/// - Suscripción a [Stream<User?>] — no se necesita leer Firestore por separado.
+/// - [onError] en el stream — no crashea la app si Firebase emite un error.
+/// - [correoVerificacionEnviado] se resetea al cerrar sesión.
+/// - [limpiarError] restaura el estado coherente preservando el usuario cacheado.
+/// - [recargarUsuario] y [actualizarPerfil] actualizan el caché en memoria.
 class AuthProvider extends ChangeNotifier {
   final AuthRepository _repo;
 
-  /// Suscripción al stream de Firebase; se cancela en [dispose].
-  StreamSubscription<bool>? _authSub;
+  StreamSubscription<User?>? _authSub;
 
-  // ── Estado ─────────────────────────────────────────────────────
+  // ── Estado ─────────────────────────────────────────────────────────────────
 
   AuthStatus _status = AuthStatus.inicial;
-  UserModel? _usuario;
+  User? _usuario;
   String? _errorMessage;
-
-  // Controla si el correo de verificación fue enviado recientemente
   bool _correoVerificacionEnviado = false;
 
-  // ── Getters públicos ───────────────────────────────────────────
+  // ── Getters públicos ───────────────────────────────────────────────────────
 
   AuthStatus get status => _status;
-  UserModel? get usuario => _usuario;
+  User? get usuario => _usuario;
   String? get errorMessage => _errorMessage;
 
   bool get isLoading => _status == AuthStatus.cargando;
   bool get isAutenticado => _status == AuthStatus.autenticado;
   bool get correoVerificacionEnviado => _correoVerificacionEnviado;
 
-  // ── Constructor ────────────────────────────────────────────────
+  // ── Constructor ─────────────────────────────────────────────────────────────
 
-  AuthProvider({AuthRepository? repo})
-      : _repo = repo ?? AuthRepositoryImpl() {
+  /// Requiere una instancia de [AuthRepository].
+  ///
+  /// **Diseño intencional:** no hay valor por defecto. El punto de composición
+  /// (main.dart o un ChangeNotifierProvider en el árbol de widgets) inyecta
+  /// [AuthRepositoryImpl]. Esto garantiza que los tests puedan inyectar un mock
+  /// sin modificar este provider.
+  ///
+  /// Ejemplo de registro en main.dart:
+  /// ```dart
+  /// ChangeNotifierProvider(
+  ///   create: (_) => AuthProvider(repo: AuthRepositoryImpl()),
+  /// )
+  /// ```
+  AuthProvider({required AuthRepository repo}) : _repo = repo {
     _escucharCambiosDeAuth();
   }
 
-  // ── Escuchar Firebase Auth (stream) ───────────────────────────
+  // ── Stream de autenticación ────────────────────────────────────────────────
 
-  /// Escucha cambios de sesión de Firebase en tiempo real.
-  /// La suscripción se cancela automáticamente en [dispose].
   void _escucharCambiosDeAuth() {
-    _authSub = _repo.authStateChanges.listen((haySession) async {
-      if (haySession) {
-        final user = await _repo.obtenerUsuarioActual();
-        _usuario = user;
-        _status = user != null ? AuthStatus.autenticado : AuthStatus.noAutenticado;
-      } else {
-        _usuario = null;
-        _status = AuthStatus.noAutenticado;
-      }
-      notifyListeners();
-    });
+    _authSub = _repo.authStateChanges.listen(
+      _handleAuthChange,
+      // ✅ onError: el stream nunca crashea la app silenciosamente
+      onError: (Object error, StackTrace st) {
+        if (kDebugMode) debugPrint('[AuthProvider] Stream error: $error');
+        _setError('Error de sesión. Reinicia la aplicación.');
+      },
+    );
   }
 
-  // ── Registro ───────────────────────────────────────────────────
+  void _handleAuthChange(User? user) {
+    _usuario = user;
+    _status = user != null ? AuthStatus.autenticado : AuthStatus.noAutenticado;
+
+    // Resetear flags de sesión anterior al cerrar sesión
+    if (user == null) {
+      _correoVerificacionEnviado = false;
+    }
+
+    notifyListeners();
+  }
+
+  // ── Registro ───────────────────────────────────────────────────────────────
 
   Future<bool> registrar({
     required String nombre,
@@ -98,14 +119,19 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     _iniciarCarga();
     try {
-      _usuario = await _repo.registrar(
+      // Value objects validan antes de llegar al repositorio
+      final emailVO = EmailAddress(email);
+      final passVO = Password(password);
+
+      await _repo.registrar(
         nombre: nombre,
-        email: email,
-        password: password,
+        email: emailVO,
+        password: passVO,
         telefono: telefono,
         negocio: negocio,
       );
-      _status = AuthStatus.autenticado;
+
+      // El stream actualiza _usuario y _status automáticamente.
       _errorMessage = null;
       notifyListeners();
       return true;
@@ -118,7 +144,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ── Login ──────────────────────────────────────────────────────
+  // ── Login ──────────────────────────────────────────────────────────────────
 
   Future<bool> login({
     required String email,
@@ -126,8 +152,11 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     _iniciarCarga();
     try {
-      _usuario = await _repo.login(email: email, password: password);
-      _status = AuthStatus.autenticado;
+      final emailVO = EmailAddress(email);
+      final passVO = Password.login(password);
+
+      await _repo.login(email: emailVO, password: passVO);
+
       _errorMessage = null;
       notifyListeners();
       return true;
@@ -140,12 +169,14 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ── Recuperar contraseña ───────────────────────────────────────
+  // ── Recuperar contraseña ───────────────────────────────────────────────────
 
   Future<bool> recuperarPassword(String email) async {
     _iniciarCarga();
     try {
-      await _repo.recuperarPassword(email);
+      final emailVO = EmailAddress(email);
+      await _repo.recuperarPassword(emailVO);
+
       _status = AuthStatus.noAutenticado;
       _errorMessage = null;
       notifyListeners();
@@ -159,13 +190,13 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ── Logout ─────────────────────────────────────────────────────
+  // ── Logout ─────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {
     try {
       await _repo.logout();
     } catch (_) {
-      // Si Firebase falla al cerrar sesión, forzar el estado local igualmente
+      // Si Firebase falla al cerrar sesión, forzar el estado local.
     } finally {
       _usuario = null;
       _status = AuthStatus.noAutenticado;
@@ -175,7 +206,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ── Actualizar perfil ──────────────────────────────────────────
+  // ── Actualizar perfil ──────────────────────────────────────────────────────
 
   Future<bool> actualizarPerfil({
     String? nombre,
@@ -187,12 +218,15 @@ class AuthProvider extends ChangeNotifier {
 
     _iniciarCarga();
     try {
-      _usuario = await _repo.actualizarPerfil(
+      final updated = await _repo.actualizarPerfil(
         uid: uid,
         nombre: nombre,
         telefono: telefono,
         negocio: negocio,
       );
+
+      // Actualizar caché en memoria
+      _usuario = updated;
       _status = AuthStatus.autenticado;
       _errorMessage = null;
       notifyListeners();
@@ -206,14 +240,14 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ── Verificación de correo ─────────────────────────────────────
+  // ── Verificación de correo ─────────────────────────────────────────────────
 
-  /// Envía (o reenvía) el correo de verificación al usuario autenticado.
   Future<bool> enviarVerificacionEmail() async {
     _iniciarCarga();
     try {
       await _repo.enviarVerificacionEmail();
-      _status = isAutenticado ? AuthStatus.autenticado : AuthStatus.noAutenticado;
+
+      _status = _usuario != null ? AuthStatus.autenticado : AuthStatus.noAutenticado;
       _correoVerificacionEnviado = true;
       _errorMessage = null;
       notifyListeners();
@@ -227,29 +261,36 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Recarga el usuario de Firebase y actualiza el estado local.
+  /// Recarga el usuario de Firebase y actualiza el caché en memoria.
+  ///
+  /// Tras el reload, el stream de Firebase emite automáticamente el estado
+  /// actualizado. Este método fuerza la recarga cuando el stream no lo hace
+  /// (p.ej. en el polling de verificación de email).
   Future<void> recargarUsuario() async {
     await _repo.recargarUsuario();
-    final user = await _repo.obtenerUsuarioActual();
-    if (user != null) {
-      _usuario = user;
-      notifyListeners();
+    try {
+      final user = await _repo.obtenerUsuarioActual();
+      if (user != null && user != _usuario) {
+        _usuario = user;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Silenciar: si falla la recarga, el estado anterior sigue siendo válido.
     }
   }
 
-  // ── Utilidades ─────────────────────────────────────────────────
+  // ── Utilidades ─────────────────────────────────────────────────────────────
 
-  /// Permite a la UI descartar el banner de error sin relanzar la operación.
+  /// Descarta el mensaje de error y restaura el estado coherente.
   void limpiarError() {
     if (_errorMessage != null) {
       _errorMessage = null;
-      // Restaurar estado coherente: si hay usuario, autenticado; si no, noAutenticado
       _status = _usuario != null ? AuthStatus.autenticado : AuthStatus.noAutenticado;
       notifyListeners();
     }
   }
 
-  // ── Helpers privados ───────────────────────────────────────────
+  // ── Helpers privados ───────────────────────────────────────────────────────
 
   void _iniciarCarga() {
     _status = AuthStatus.cargando;
@@ -263,11 +304,10 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Dispose (cancelar suscripción al stream) ───────────────────
+  // ── Dispose ────────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
-    // CRÍTICO: cancelar la suscripción para evitar memory leaks
     _authSub?.cancel();
     super.dispose();
   }

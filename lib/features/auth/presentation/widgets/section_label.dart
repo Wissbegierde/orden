@@ -2,14 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 
 /// Encabezado de sección dentro de formularios de autenticación.
-///
-/// Reemplaza el helper `_seccion()` que estaba duplicado en ambas
-/// pantallas de registro (legacy y nueva).
-///
-/// Ejemplo de uso:
-/// ```dart
-/// const SectionLabel('Datos personales'),
-/// ```
 class SectionLabel extends StatelessWidget {
   final String titulo;
 

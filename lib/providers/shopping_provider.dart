@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -57,6 +59,52 @@ class ShoppingProvider extends ChangeNotifier {
 
       return active;
     });
+  }
+
+  /// Compras con saldo pendiente (balance > 0), considerando pagos parciales.
+  /// Se actualiza cuando cambian compras o pagos.
+  Stream<List<PurchaseWithBalance>> unpaidShoppingsWithBalance() {
+    final controller = StreamController<List<PurchaseWithBalance>>.broadcast();
+
+    Future<void> compute() async {
+      final comprasSnap = await _db.collection('compras').get();
+      final paymentsSnap = await _db.collection('pagos_compras').get();
+
+      final shoppings = comprasSnap.docs
+          .map(Shopping.fromFirestore)
+          .where((s) => !s.isDeleted)
+          .toList();
+
+      final paidByShopping = <String, double>{};
+      for (final doc in paymentsSnap.docs) {
+        final p = ShoppingPayment.fromFirestore(doc);
+        paidByShopping[p.shoppingId] =
+            (paidByShopping[p.shoppingId] ?? 0) + p.amount;
+      }
+
+      final result = <PurchaseWithBalance>[];
+      for (final s in shoppings) {
+        final totalPaid = paidByShopping[s.id] ?? 0;
+        final balance = s.amount - totalPaid;
+        if (balance > 0) {
+          result.add(PurchaseWithBalance(shopping: s, balance: balance));
+        }
+      }
+      result.sort((a, b) => b.shopping.date.compareTo(a.shopping.date));
+      if (!controller.isClosed) controller.add(result);
+    }
+
+    final sub1 = _db.collection('compras').snapshots().listen((_) => compute());
+    final sub2 =
+        _db.collection('pagos_compras').snapshots().listen((_) => compute());
+
+    controller.onCancel = () {
+      sub1.cancel();
+      sub2.cancel();
+    };
+
+    compute();
+    return controller.stream;
   }
 
   // ── CRUD Compras ───────────────────────────────────────────────
@@ -240,6 +288,15 @@ class ShoppingProvider extends ChangeNotifier {
     return active;
   }
 
+  /// Todas las compras (para reporte Por Pagar: deudas con saldo).
+  Future<List<Shopping>> fetchAllShoppings() async {
+    final snap = await _db.collection('compras').get();
+    final shoppings = snap.docs.map(Shopping.fromFirestore).toList();
+    final active = shoppings.where((s) => !s.isDeleted).toList();
+    active.sort((a, b) => b.date.compareTo(a.date));
+    return active;
+  }
+
   Future<List<ShoppingPayment>> fetchPaymentsForRange(
     DateTime from,
     DateTime to,
@@ -255,6 +312,17 @@ class ShoppingProvider extends ChangeNotifier {
     payments.sort((a, b) => b.date.compareTo(a.date));
 
     return payments;
+  }
+
+  /// Total pagado por cada compra (para calcular saldo pendiente).
+  Future<Map<String, double>> fetchTotalPaidByShoppingId() async {
+    final snap = await _db.collection('pagos_compras').get();
+    final map = <String, double>{};
+    for (final doc in snap.docs) {
+      final p = ShoppingPayment.fromFirestore(doc);
+      map[p.shoppingId] = (map[p.shoppingId] ?? 0) + p.amount;
+    }
+    return map;
   }
 }
 

@@ -134,3 +134,11 @@ class ShoppingPayment {
     );
   }
 }
+
+/// Compra con su saldo pendiente (monto total - pagos realizados).
+class PurchaseWithBalance {
+  final Shopping shopping;
+  final double balance;
+
+  PurchaseWithBalance({required this.shopping, required this.balance});
+}

@@ -26,7 +26,8 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
   List<bills.Bill> _bills = [];
   List<bills.BillPayment> _billPayments = [];
   List<shop.Shopping> _shoppings = [];
-  List<shop.ShoppingPayment> _shoppingPayments = [];
+  List<shop.Shopping> _allShoppings = [];
+  Map<String, double> _totalPaidByShoppingId = {};
 
   bool _loading = false;
 
@@ -67,6 +68,8 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
       billsProvider.fetchPaymentsForRange(from, to),
       shoppingProvider.fetchShoppingsForRange(from, to),
       shoppingProvider.fetchPaymentsForRange(from, to),
+      shoppingProvider.fetchTotalPaidByShoppingId(),
+      shoppingProvider.fetchAllShoppings(),
     ]);
 
     setState(() {
@@ -74,7 +77,9 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
       _bills = results[1] as List<bills.Bill>;
       _billPayments = results[2] as List<bills.BillPayment>;
       _shoppings = results[3] as List<shop.Shopping>;
-      _shoppingPayments = results[4] as List<shop.ShoppingPayment>;
+      // results[4] = shopping payments (solo para completar Future.wait)
+      _totalPaidByShoppingId = results[5] as Map<String, double>;
+      _allShoppings = results[6] as List<shop.Shopping>;
       _loading = false;
     });
   }
@@ -313,53 +318,43 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
       );
     }
 
-    // Compras a crédito
-    final creditPurchasesByProvider = <String, double>{};
-    for (final s in _shoppings) {
-      if (s.paymentType != shop.PaymentType.credito) continue;
+    // Compras con saldo pendiente (todas las formas de pago, descuenta pagos)
+    final balanceByProviderCompras = <String, double>{};
+    final descriptionsByProviderCompras = <String, List<String>>{};
+    for (final s in _allShoppings) {
+      if (s.id == null) continue;
+      final totalPaid = _totalPaidByShoppingId[s.id!] ?? 0;
+      final balance = s.amount - totalPaid;
+      if (balance <= 0) continue;
       final key =
           (s.providerName?.trim().isNotEmpty == true
                   ? s.providerName!
                   : s.description)
               .trim();
-      creditPurchasesByProvider[key] =
-          (creditPurchasesByProvider[key] ?? 0) + s.amount;
-    }
-
-    final shoppingById = <String, shop.Shopping>{};
-    for (final s in _shoppings) {
-      if (s.id != null) shoppingById[s.id!] = s;
-    }
-    final paymentsPurchasesByProvider = <String, double>{};
-    for (final p in _shoppingPayments) {
-      final s = shoppingById[p.shoppingId];
-      if (s == null || s.paymentType != shop.PaymentType.credito) continue;
-      final key =
-          (s.providerName?.trim().isNotEmpty == true
-                  ? s.providerName!
-                  : s.description)
-              .trim();
-      paymentsPurchasesByProvider[key] =
-          (paymentsPurchasesByProvider[key] ?? 0) + p.amount;
+      balanceByProviderCompras[key] =
+          (balanceByProviderCompras[key] ?? 0) + balance;
+      descriptionsByProviderCompras
+          .putIfAbsent(key, () => [])
+          .add(s.description);
     }
 
     final comprasEntries = <_BalanceEntry>[];
-    final providersCompras = {
-      ...creditPurchasesByProvider.keys,
-      ...paymentsPurchasesByProvider.keys,
-    };
-    for (final p in providersCompras) {
-      final credit = creditPurchasesByProvider[p] ?? 0;
-      final paid = paymentsPurchasesByProvider[p] ?? 0;
-      final balance = credit - paid;
-      if (balance > 0) {
-        comprasEntries.add(_BalanceEntry(name: p, balance: balance));
-      }
+    for (final e in balanceByProviderCompras.entries) {
+      final descriptions = descriptionsByProviderCompras[e.key];
+      final subtitle = (descriptions != null && descriptions.isNotEmpty)
+          ? descriptions.join(' · ')
+          : null;
+      comprasEntries.add(_BalanceEntry(
+        name: e.key,
+        balance: e.value,
+        subtitle: subtitle,
+      ));
     }
     comprasEntries.sort((a, b) => b.balance.compareTo(a.balance));
 
-    // Gastos (pendientes según pagos realizados)
+    // Gastos (pendientes según pagos realizados; descripciones por proveedor)
     final creditBillsByProvider = <String, double>{};
+    final descriptionsByProviderGastos = <String, List<String>>{};
     for (final b in _bills) {
       final key =
           (b.providerName?.trim().isNotEmpty == true
@@ -367,6 +362,9 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
                   : b.description)
               .trim();
       creditBillsByProvider[key] = (creditBillsByProvider[key] ?? 0) + b.amount;
+      descriptionsByProviderGastos
+          .putIfAbsent(key, () => [])
+          .add(b.description);
     }
 
     final billById = <String, bills.Bill>{};
@@ -396,7 +394,15 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
       final paid = paymentsBillsByProvider[p] ?? 0;
       final balance = credit - paid;
       if (balance > 0) {
-        gastosEntries.add(_BalanceEntry(name: p, balance: balance));
+        final descriptions = descriptionsByProviderGastos[p];
+        final subtitle = (descriptions != null && descriptions.isNotEmpty)
+            ? descriptions.join(' · ')
+            : null;
+        gastosEntries.add(_BalanceEntry(
+          name: p,
+          balance: balance,
+          subtitle: subtitle,
+        ));
       }
     }
     gastosEntries.sort((a, b) => b.balance.compareTo(a.balance));
@@ -449,6 +455,7 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
                   amount: e.balance,
                   currency: currency,
                   color: const Color(0xFFF97316),
+                  subtitle: e.subtitle,
                 ),
               ),
               const SizedBox(height: 20),
@@ -469,6 +476,7 @@ class _ReportsModuleScreenState extends State<ReportsModuleScreen>
                   amount: e.balance,
                   currency: currency,
                   color: const Color(0xFFEF4444),
+                  subtitle: e.subtitle,
                 ),
               ),
             ],
@@ -666,8 +674,13 @@ class _IncomeRow extends StatelessWidget {
 class _BalanceEntry {
   final String name;
   final double balance;
+  final String? subtitle;
 
-  _BalanceEntry({required this.name, required this.balance});
+  _BalanceEntry({
+    required this.name,
+    required this.balance,
+    this.subtitle,
+  });
 }
 
 class _BalanceTile extends StatelessWidget {
@@ -675,12 +688,14 @@ class _BalanceTile extends StatelessWidget {
   final double amount;
   final NumberFormat currency;
   final Color color;
+  final String? subtitle;
 
   const _BalanceTile({
     required this.title,
     required this.amount,
     required this.currency,
     required this.color,
+    this.subtitle,
   });
 
   @override
@@ -700,6 +715,7 @@ class _BalanceTile extends StatelessWidget {
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 6,
@@ -711,12 +727,30 @@ class _BalanceTile extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1E1B4B),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E1B4B),
+                  ),
+                ),
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(width: 8),

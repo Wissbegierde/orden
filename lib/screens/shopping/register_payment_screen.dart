@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/shopping.dart';
 import '../../providers/shopping_provider.dart';
 
@@ -19,6 +20,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
 
   Shopping? _selectedShopping;
   String? _selectedShoppingId;
+  double _selectedBalance = 0;
   DateTime _selectedDate = DateTime.now();
 
   final SpeechToText _speech = SpeechToText();
@@ -102,6 +104,17 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
       );
       return;
     }
+    if (amount > _selectedBalance && _selectedBalance > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'El monto no puede superar el saldo pendiente (${NumberFormat.currency(locale: 'es_CO', symbol: r'$', decimalDigits: 0).format(_selectedBalance)})',
+          ),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
 
     final payment = ShoppingPayment(
       shoppingId: _selectedShopping!.id!,
@@ -128,8 +141,8 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   }
 
   Widget _buildBillsDropdown() {
-    return StreamBuilder<List<Shopping>>(
-      stream: context.read<ShoppingProvider>().unpaidShoppings(),
+    return StreamBuilder<List<PurchaseWithBalance>>(
+      stream: context.read<ShoppingProvider>().unpaidShoppingsWithBalance(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -150,20 +163,20 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           );
         }
 
-        final shoppings = snapshot.data ?? [];
+        final items = snapshot.data ?? [];
 
-        Shopping? currentSelection = _selectedShopping;
+        PurchaseWithBalance? currentSelection;
         if (_selectedShoppingId != null) {
           try {
-            currentSelection = shoppings
-                .firstWhere((s) => s.id == _selectedShoppingId);
+            currentSelection =
+                items.firstWhere((x) => x.shopping.id == _selectedShoppingId);
           } catch (_) {
-            currentSelection = null;
             _selectedShoppingId = null;
+            _selectedShopping = null;
           }
         }
 
-        if (shoppings.isEmpty) {
+        if (items.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -177,9 +190,29 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           );
         }
 
-        return DropdownButtonFormField<Shopping>(
+        final currency = NumberFormat.currency(
+          locale: 'es_CO',
+          symbol: r'$',
+          decimalDigits: 0,
+        );
+
+        if (currentSelection != null &&
+            _selectedBalance != currentSelection.balance) {
+          final balance = currentSelection.balance;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _selectedBalance = balance);
+            }
+          });
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<PurchaseWithBalance>(
           value: currentSelection,
-          hint: const Text('Seleccione una compra'),
+          isExpanded: true,
+          hint: const Text('Seleccione proveedor'),
           decoration: InputDecoration(
             border:
                 OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -189,31 +222,45 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                   const BorderSide(color: Color(0xFFF2D51D), width: 2),
             ),
           ),
-          items: shoppings.map((shopping) {
-            final label = shopping.providerName?.isNotEmpty == true
-                ? shopping.providerName!
-                : shopping.description;
-            return DropdownMenuItem<Shopping>(
-              value: shopping,
+          items: items.map((item) {
+            final providerName =
+                item.shopping.providerName?.trim().isNotEmpty == true
+                    ? item.shopping.providerName!.trim()
+                    : 'Sin proveedor';
+            return DropdownMenuItem<PurchaseWithBalance>(
+              value: item,
               child: Text(
-                '$label',
+                '$providerName — ${currency.format(item.balance)} pendiente',
                 overflow: TextOverflow.ellipsis,
               ),
             );
           }).toList(),
-          onChanged: (shopping) {
+          onChanged: (item) {
             setState(() {
-              _selectedShopping = shopping;
-              _selectedShoppingId = shopping?.id;
+              if (item != null) {
+                _selectedShopping = item.shopping;
+                _selectedShoppingId = item.shopping.id;
+                _selectedBalance = item.balance;
+              }
             });
           },
+        ),
+            _billDetails(currentSelection?.balance ?? _selectedBalance),
+          ],
         );
       },
     );
   }
 
-  Widget _billDetails() {
+  Widget _billDetails(double? balance) {
     if (_selectedShopping == null) return const SizedBox();
+    final s = _selectedShopping!;
+    final currency = NumberFormat.currency(
+      locale: 'es_CO',
+      symbol: r'$',
+      decimalDigits: 0,
+    );
+    final saldoPendiente = balance ?? _selectedBalance;
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(12),
@@ -225,35 +272,60 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _detailRow(
-            'Monto Total',
-            NumberFormat.currency(
-              locale: 'es_CO',
-              symbol: r'$',
-              decimalDigits: 0,
-            ).format(_selectedShopping!.amount),
-          ),
+          _detailRow('Monto Total', currency.format(s.amount)),
           const SizedBox(height: 4),
           _detailRow(
-            'Fecha',
-            DateFormat('dd/MM/yyyy').format(_selectedShopping!.date),
+            'Saldo pendiente',
+            currency.format(saldoPendiente),
+            isHighlight: true,
           ),
-          if (_selectedShopping!.providerName?.isNotEmpty == true) ...[
+          const SizedBox(height: 4),
+          _detailRow('Fecha', DateFormat('dd/MM/yyyy').format(s.date)),
+          if (s.providerName?.trim().isNotEmpty == true) ...[
             const SizedBox(height: 4),
-            _detailRow('Proveedor', _selectedShopping!.providerName!),
+            _detailRow('Proveedor', s.providerName!),
           ],
+          const SizedBox(height: 4),
+          if (s.productId == null)
+            _detailRow('Lo comprado', s.description)
+          else
+            FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              future: FirebaseFirestore.instance
+                  .collection('productos')
+                  .doc(s.productId!)
+                  .get(),
+              builder: (context, snapshot) {
+                String value = s.description;
+                if (snapshot.hasData && snapshot.data!.data() != null) {
+                  final data = snapshot.data!.data()!;
+                  final name = (data['name'] as String?)?.trim();
+                  if (name != null && name.isNotEmpty) {
+                    // Solo mostramos el nombre del producto
+                    value = name;
+                  }
+                }
+                return _detailRow('Lo comprado', value);
+              },
+            ),
         ],
       ),
     );
   }
 
-  Widget _detailRow(String label, String value) {
+  Widget _detailRow(String label, String value, {bool isHighlight = false}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: const TextStyle(color: Colors.black54)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isHighlight ? const Color(0xFFF59E0B) : null,
+          ),
+        ),
       ],
     );
   }
@@ -320,7 +392,6 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
               ),
               const SizedBox(height: 10),
               _buildBillsDropdown(),
-              _billDetails(),
               const SizedBox(height: 20),
               const Text(
                 'Monto del Pago',

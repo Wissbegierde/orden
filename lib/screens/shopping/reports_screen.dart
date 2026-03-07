@@ -74,7 +74,6 @@ class _ReportsScreenState extends State<ReportsScreen>
         24,
         (_) => {
           PaymentType.efectivo: 0.0,
-          PaymentType.nequi: 0.0,
           PaymentType.credito: 0.0,
           PaymentType.transferencia: 0.0,
           PaymentType.tarjeta: 0.0,
@@ -91,7 +90,6 @@ class _ReportsScreenState extends State<ReportsScreen>
         7,
         (_) => {
           PaymentType.efectivo: 0.0,
-          PaymentType.nequi: 0.0,
           PaymentType.credito: 0.0,
           PaymentType.transferencia: 0.0,
           PaymentType.tarjeta: 0.0,
@@ -111,7 +109,6 @@ class _ReportsScreenState extends State<ReportsScreen>
         numWeeks,
         (_) => {
           PaymentType.efectivo: 0.0,
-          PaymentType.nequi: 0.0,
           PaymentType.credito: 0.0,
           PaymentType.transferencia: 0.0,
           PaymentType.tarjeta: 0.0,
@@ -131,8 +128,6 @@ class _ReportsScreenState extends State<ReportsScreen>
     switch (type) {
       case PaymentType.efectivo:
         return const Color(0xFF10B981);
-      case PaymentType.nequi:
-        return const Color(0xFF8B5CF6);
       case PaymentType.credito:
         return const Color(0xFFEF4444);
       case PaymentType.transferencia:

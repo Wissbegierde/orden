@@ -49,6 +49,9 @@ dependencies:
   # Charts
   fl_chart: ^0.69.0
 
+  #svg
+  flutter_svg: ^2.0.10
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -65,6 +68,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  assets:
+    - assets/logo.svg
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

@@ -238,8 +238,6 @@ class _PurchaseTile extends StatelessWidget {
     switch (shopping.paymentType) {
       case PaymentType.efectivo:
         return const Color(0xFF10B981);
-      case PaymentType.nequi:
-        return const Color(0xFFEF4444);
       case PaymentType.transferencia:
         return const Color(0xFF3B82F6);
       case PaymentType.tarjeta:

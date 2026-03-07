@@ -1,14 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum PaymentType { efectivo, nequi, transferencia, tarjeta, credito }
+enum PaymentType { efectivo, transferencia, tarjeta, credito }
 
 extension PaymentTypeExtension on PaymentType {
   String get label {
     switch (this) {
       case PaymentType.efectivo:
         return 'Efectivo';
-      case PaymentType.nequi:
-        return 'Nequi';
       case PaymentType.transferencia:
         return 'Transferencia';
       case PaymentType.tarjeta:

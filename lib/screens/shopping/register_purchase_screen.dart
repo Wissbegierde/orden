@@ -260,7 +260,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
 
               // Producto (opcional - integra con inventario)
               const Text(
-                'Producto (opcional)',
+                'Producto',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
               const SizedBox(height: 6),
@@ -270,7 +270,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                   final products = snap.data ?? [];
                   return DropdownButtonFormField<Product>(
                     value: _selectedProduct,
-                    hint: const Text('Sin producto (solo compra)'),
+                    hint: const Text('Seleccione el producto...'),
                     decoration: InputDecoration(
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -281,6 +281,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                             const BorderSide(color: Color(0xFFF2D51D), width: 2),
                       ),
                     ),
+                    isExpanded: true,
                     items: products
                         .map((p) => DropdownMenuItem(
                               value: p,

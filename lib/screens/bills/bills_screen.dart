@@ -183,14 +183,41 @@ class BillsScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: _ActionButton(
-                    icon: Icons.payment_rounded,
-                    label: 'Registrar\nPago',
-                    color: const Color(0xFF8B5CF6),
+                  child: GestureDetector(
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => const RegisterBillPaymentScreen(),
+                      ),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.credit_card_rounded,
+                            color: Color(0xFFF59E0B),
+                            size: 28,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Pagar\nCrédito',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFFF59E0B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -303,139 +330,194 @@ class _BillCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatted = NumberFormat.currency(
+    final currencyFmt = NumberFormat.currency(
       locale: 'es_CO',
       symbol: '\$',
       decimalDigits: 0,
-    ).format(bill.amount);
-
-    final dateFormatted = DateFormat('d MMM, HH:mm', 'es').format(bill.date);
+    );
+    final formatted = currencyFmt.format(bill.amount);
+    final timeStr = DateFormat('hh:mm a – dd/MM/yyyy', 'es').format(bill.date);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 0,
+      color: Colors.white,
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: _getCategoryColor().withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(_getCategoryIcon(), color: _getCategoryColor()),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    bill.description,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Category icon
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: _getCategoryColor().withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
+                  child: Icon(
+                    _getCategoryIcon(),
+                    color: _getCategoryColor(),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Title + meta
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getPaymentTypeColor(
-                            bill.paymentType,
-                          ).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          bill.paymentType.label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: _getPaymentTypeColor(bill.paymentType),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       Text(
-                        dateFormatted,
+                        bill.description,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        bill.categoryLabel,
+                        style: const TextStyle(
                           color: Colors.grey,
+                          fontSize: 12,
                         ),
                       ),
+                      Text(
+                        timeStr,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 11,
+                        ),
+                      ),
+                      if (bill.providerName != null &&
+                          bill.providerName!.isNotEmpty)
+                        Text(
+                          'Proveedor: ${bill.providerName}',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(
+                ),
+                // Amount + edit/delete
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
                       formatted,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: Color(0xFFEF4444),
+                        fontSize: 15,
+                        color: Color(0xFF1E1B4B),
                       ),
                     ),
-                    PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'delete') {
-                          _showDeleteDialog(context);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem<String>(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete_forever, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text('Eliminar'),
-                            ],
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit_rounded,
+                            size: 18,
+                            color: Colors.grey,
                           ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterBillScreen(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete_rounded,
+                            size: 18,
+                            color: Color(0xFFEF4444),
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _showDeleteDialog(context),
                         ),
                       ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Payment type badge + paid/pending
+            Row(
+              children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
-                    vertical: 2,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _getPaymentTypeColor(
+                      bill.paymentType,
+                    ).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    bill.paymentType.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _getPaymentTypeColor(bill.paymentType),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
                   ),
                   decoration: BoxDecoration(
                     color: bill.paid
-                        ? const Color(0xFF10B981).withValues(alpha: 0.2)
-                        : const Color(0xFFFCD34D).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
+                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                        : const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     bill.paid ? 'Pagado' : 'Pendiente',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: bill.paid
                           ? const Color(0xFF10B981)
-                          : const Color(0xFFFCD34D),
+                          : const Color(0xFFF59E0B),
                     ),
                   ),
                 ),
               ],
             ),
+            // Notes
+            if (bill.notes != null && bill.notes!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                bill.notes!,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
         ),
       ),

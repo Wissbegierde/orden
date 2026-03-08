@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import '../../mixins/voice_form_mixin.dart';
 import '../../models/product.dart';
 import '../../models/shopping.dart';
 import '../../providers/inventory_provider.dart';
@@ -14,23 +14,25 @@ class RegisterPurchaseScreen extends StatefulWidget {
   State<RegisterPurchaseScreen> createState() => _RegisterPurchaseScreenState();
 }
 
-class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
+class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen>
+    with VoiceFormMixin {
   final _formKey = GlobalKey<FormState>();
   final _descriptionCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _providerCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _quantityCtrl = TextEditingController();
+
+  final _descriptionFocus = FocusNode();
+  final _amountFocus = FocusNode();
+  final _providerFocus = FocusNode();
+  final _notesFocus = FocusNode();
+  final _quantityFocus = FocusNode();
 
   PaymentType _selectedPaymentType = PaymentType.efectivo;
   DateTime _selectedDate = DateTime.now();
   bool _paid = false;
   Product? _selectedProduct;
-  final _quantityCtrl = TextEditingController();
-
-  final SpeechToText _speech = SpeechToText();
-  bool _speechAvailable = false;
-  bool _isListening = false;
-  TextEditingController? _activeField;
 
   static const double _maxAmount = 1000000000;
   static const int _maxProviderLength = 100;
@@ -39,7 +41,13 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
   @override
   void initState() {
     super.initState();
-    _initSpeech();
+    initVoiceForm(
+      controllers: [_descriptionCtrl, _amountCtrl, _providerCtrl, _notesCtrl],
+      focusNodes: [_descriptionFocus, _amountFocus, _providerFocus, _notesFocus],
+      isNumeric: [false, true, false, false],
+      onSave: _submit,
+      accentColor: const Color(0xFFF2D51D),
+    );
     _quantityCtrl.addListener(_recalcTotal);
   }
 
@@ -51,41 +59,6 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
       final total = _selectedProduct!.costPrice * qty;
       _amountCtrl.text = total.toStringAsFixed(0);
     }
-  }
-
-  Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
-    setState(() {});
-  }
-
-  Future<void> _listen(TextEditingController field) async {
-    if (!_speechAvailable) return;
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }
-    setState(() {
-      _isListening = true;
-      _activeField = field;
-    });
-    await _speech.listen(
-      onResult: (result) {
-        setState(() {
-          field.text = result.recognizedWords;
-          field.selection = TextSelection.fromPosition(
-            TextPosition(offset: field.text.length),
-          );
-        });
-      },
-      localeId: 'es_CO',
-    );
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_isListening) {
-        _speech.stop();
-        setState(() => _isListening = false);
-      }
-    });
   }
 
   Future<void> _selectDate() async {
@@ -163,17 +136,24 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
 
   @override
   void dispose() {
+    disposeVoiceForm();
     _descriptionCtrl.dispose();
     _amountCtrl.dispose();
     _providerCtrl.dispose();
     _notesCtrl.dispose();
     _quantityCtrl.dispose();
+    _descriptionFocus.dispose();
+    _amountFocus.dispose();
+    _providerFocus.dispose();
+    _notesFocus.dispose();
+    _quantityFocus.dispose();
     super.dispose();
   }
 
   Widget _micField({
     required TextEditingController controller,
     required String label,
+    FocusNode? focusNode,
     String? prefixText,
     TextInputType keyboardType = TextInputType.text,
     int maxLines = 1,
@@ -182,6 +162,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: keyboardType,
       maxLines: maxLines,
       maxLength: maxLength,
@@ -194,19 +175,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFF2D51D), width: 2),
         ),
-        suffixIcon: _speechAvailable
-            ? IconButton(
-                icon: Icon(
-                  _activeField == controller && _isListening
-                      ? Icons.mic
-                      : Icons.mic_none,
-                  color: _activeField == controller && _isListening
-                      ? Colors.red
-                      : const Color(0xFFF2D51D),
-                ),
-                onPressed: () => _listen(controller),
-              )
-            : null,
+        suffixIcon: voiceMicIcon(controller),
       ),
     );
   }
@@ -215,6 +184,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      floatingActionButton: buildVoiceFAB(),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF2D51D),
         foregroundColor: Colors.white,
@@ -228,44 +198,8 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_speechAvailable)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2D51D).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFFF2D51D).withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isListening ? Icons.mic : Icons.mic_none,
-                        color: _isListening
-                            ? Colors.red
-                            : const Color(0xFFF2D51D),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isListening
-                            ? 'Escuchando... habla ahora'
-                            : 'Presiona 🎤 en los campos para dictar',
-                        style: TextStyle(
-                          color: _isListening
-                              ? Colors.red
-                              : const Color(0xFF92700A),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              buildVoiceBanner(const Color(0xFFF2D51D)),
+
 
               // Producto (opcional - integra con inventario)
               const Text(
@@ -328,6 +262,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
                 const SizedBox(height: 12),
                 _micField(
                   controller: _quantityCtrl,
+                  focusNode: _quantityFocus,
                   label: 'Cantidad a agregar al inventario',
                   keyboardType: TextInputType.number,
                   validator: (v) {
@@ -345,6 +280,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
               // Descripción
               _micField(
                 controller: _descriptionCtrl,
+                focusNode: _descriptionFocus,
                 label: 'Descripción de la Compra',
                 validator: _validateDescription,
               ),
@@ -353,6 +289,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
               // Monto
               _micField(
                 controller: _amountCtrl,
+                focusNode: _amountFocus,
                 label: 'Monto',
                 prefixText: r'$ ',
                 keyboardType: const TextInputType.numberWithOptions(
@@ -365,6 +302,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
               // Proveedor (obligatorio)
               _micField(
                 controller: _providerCtrl,
+                focusNode: _providerFocus,
                 label: 'Proveedor',
                 maxLength: _maxProviderLength,
                 validator: (v) {
@@ -460,6 +398,7 @@ class _RegisterPurchaseScreenState extends State<RegisterPurchaseScreen> {
               // Notas
               _micField(
                 controller: _notesCtrl,
+                focusNode: _notesFocus,
                 label: 'Notas (Opcional)',
                 maxLines: 3,
                 maxLength: _maxNotesLength,

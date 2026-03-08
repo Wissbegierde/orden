@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import '../../mixins/voice_form_mixin.dart';
 import '../../models/income_payment.dart';
 import '../../models/income_sale.dart';
 import '../../providers/income_provider.dart';
@@ -13,54 +13,28 @@ class RegisterPaymentScreen extends StatefulWidget {
   State<RegisterPaymentScreen> createState() => _RegisterPaymentScreenState();
 }
 
-class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
+class _RegisterPaymentScreenState extends State<RegisterPaymentScreen>
+    with VoiceFormMixin {
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
 
+  final _amountFocus = FocusNode();
+  final _notesFocus = FocusNode();
+
   // Selected debtor from the search dropdown
   IncomeSale? _selectedDebt;
-
-  final SpeechToText _speech = SpeechToText();
-  bool _speechAvailable = false;
-  bool _isListening = false;
 
   @override
   void initState() {
     super.initState();
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
-    setState(() {});
-  }
-
-  Future<void> _listen(TextEditingController field) async {
-    if (!_speechAvailable) return;
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }
-    setState(() => _isListening = true);
-    await _speech.listen(
-      onResult: (result) {
-        setState(() {
-          field.text = result.recognizedWords;
-          field.selection = TextSelection.fromPosition(
-            TextPosition(offset: field.text.length),
-          );
-        });
-      },
-      localeId: 'es_CO',
+    initVoiceForm(
+      controllers: [_amountCtrl, _notesCtrl],
+      focusNodes: [_amountFocus, _notesFocus],
+      isNumeric: [true, false],
+      onSave: _save,
+      accentColor: const Color(0xFF3B82F6),
     );
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_isListening) {
-        _speech.stop();
-        setState(() => _isListening = false);
-      }
-    });
   }
 
   Future<void> _save() async {
@@ -97,8 +71,11 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
 
   @override
   void dispose() {
+    disposeVoiceForm();
     _amountCtrl.dispose();
     _notesCtrl.dispose();
+    _amountFocus.dispose();
+    _notesFocus.dispose();
     super.dispose();
   }
 
@@ -112,6 +89,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      floatingActionButton: buildVoiceFAB(),
       appBar: AppBar(
         backgroundColor: const Color(0xFF3B82F6),
         foregroundColor: Colors.white,
@@ -125,44 +103,8 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_speechAvailable)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isListening ? Icons.mic : Icons.mic_none,
-                        color: _isListening
-                            ? Colors.red
-                            : const Color(0xFF3B82F6),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isListening
-                            ? 'Escuchando... habla ahora'
-                            : 'Presiona 🎤 para dictar',
-                        style: TextStyle(
-                          color: _isListening
-                              ? Colors.red
-                              : const Color(0xFF3B82F6),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              buildVoiceBanner(const Color(0xFF3B82F6)),
+
               const SizedBox(height: 8),
 
               // ── Buscador de clientes deudores ─────────────────────────
@@ -307,10 +249,11 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
               _label('Monto del abono *'),
               _voiceField(
                 controller: _amountCtrl,
+                focusNode: _amountFocus,
                 hint: 'Ej: 20000',
                 keyboardType: TextInputType.number,
-                isListening: _isListening,
-                onMic: _speechAvailable ? () => _listen(_amountCtrl) : null,
+                isListening: voiceListening && voiceActiveField == _amountCtrl,
+                onMic: voiceAvailable ? () => voiceListen(_amountCtrl) : null,
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Ingresa el monto';
                   final parsed = double.tryParse(
@@ -330,10 +273,11 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
               _label('Notas (opcional)'),
               _voiceField(
                 controller: _notesCtrl,
+                focusNode: _notesFocus,
                 hint: 'Detalles del abono',
                 maxLines: 3,
-                isListening: false,
-                onMic: _speechAvailable ? () => _listen(_notesCtrl) : null,
+                isListening: voiceListening && voiceActiveField == _notesCtrl,
+                onMic: voiceAvailable ? () => voiceListen(_notesCtrl) : null,
               ),
               const SizedBox(height: 30),
 
@@ -385,6 +329,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   Widget _voiceField({
     required TextEditingController controller,
     required String hint,
+    FocusNode? focusNode,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
     bool isListening = false,
@@ -393,6 +338,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       maxLines: maxLines,
       keyboardType: keyboardType,
       validator: validator,

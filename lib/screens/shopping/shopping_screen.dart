@@ -3,12 +3,36 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/shopping.dart';
 import '../../providers/shopping_provider.dart';
+import '../../services/voice_command_service.dart';
+import '../../widgets/voice_overlay.dart';
 import 'register_payment_screen.dart';
 import 'register_purchase_screen.dart';
 import 'reports_screen.dart';
 
-class ShoppingScreen extends StatelessWidget {
+class ShoppingScreen extends StatefulWidget {
   const ShoppingScreen({super.key});
+
+  @override
+  State<ShoppingScreen> createState() => _ShoppingScreenState();
+}
+
+class _ShoppingScreenState extends State<ShoppingScreen> {
+  bool _handleVoiceCommand(String normalized) {
+    if (VoiceCommandService.matchesAny(normalized, VoiceCommandService.registrarCompraAliases)) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPurchaseScreen()));
+      return true;
+    } else if (VoiceCommandService.matchesAny(normalized, VoiceCommandService.pagoProveedorAliases)) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPaymentScreen()));
+      return true;
+    } else if (VoiceCommandService.matchesAny(normalized, VoiceCommandService.reportesModuloAliases)) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsScreen()));
+      return true;
+    } else if (VoiceCommandService.matchesAny(normalized, VoiceCommandService.volverAliases)) {
+      Navigator.pop(context);
+      return true;
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +60,10 @@ class ShoppingScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
+      body: VoiceCommandOverlay(
+        accentColor: const Color(0xFFF2D51D),
+        onCommand: _handleVoiceCommand,
+        child: Column(
         children: [
           // Summary header
           Container(
@@ -181,6 +208,7 @@ class ShoppingScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

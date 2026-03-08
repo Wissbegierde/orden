@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../mixins/voice_form_mixin.dart';
 import '../../models/income_sale.dart';
 import '../../models/product.dart';
 import '../../providers/inventory_provider.dart';
@@ -13,12 +14,18 @@ class RegisterProductScreen extends StatefulWidget {
   State<RegisterProductScreen> createState() => _RegisterProductScreenState();
 }
 
-class _RegisterProductScreenState extends State<RegisterProductScreen> {
+class _RegisterProductScreenState extends State<RegisterProductScreen>
+    with VoiceFormMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
   final _costPriceCtrl = TextEditingController();
   final _quantityCtrl = TextEditingController();
+
+  final _nameFocus = FocusNode();
+  final _priceFocus = FocusNode();
+  final _costPriceFocus = FocusNode();
+  final _quantityFocus = FocusNode();
 
   PaymentType _selectedType = PaymentType.efectivo;
   DateTime? _expiryDate;
@@ -37,6 +44,13 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
       _selectedType = PaymentTypeExtension.fromString(p.defaultPayment);
       _expiryDate = p.expiryDate;
     }
+    initVoiceForm(
+      controllers: [_nameCtrl, _priceCtrl, _costPriceCtrl, _quantityCtrl],
+      focusNodes: [_nameFocus, _priceFocus, _costPriceFocus, _quantityFocus],
+      isNumeric: [false, true, true, true],
+      onSave: _save,
+      accentColor: const Color(0xFF3B82F6),
+    );
   }
 
   Future<void> _selectExpiryDate() async {
@@ -81,10 +95,15 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
 
   @override
   void dispose() {
+    disposeVoiceForm();
     _nameCtrl.dispose();
     _priceCtrl.dispose();
     _costPriceCtrl.dispose();
     _quantityCtrl.dispose();
+    _nameFocus.dispose();
+    _priceFocus.dispose();
+    _costPriceFocus.dispose();
+    _quantityFocus.dispose();
     super.dispose();
   }
 
@@ -94,6 +113,7 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      floatingActionButton: buildVoiceFAB(),
       appBar: AppBar(
         backgroundColor: const Color(0xFF3B82F6),
         foregroundColor: Colors.white,
@@ -107,7 +127,11 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Voice indicator
+              buildVoiceBanner(const Color(0xFF3B82F6)),
+
               // Info general
+
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -138,7 +162,10 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
               _SectionLabel(text: 'Nombre del Producto *'),
               TextFormField(
                 controller: _nameCtrl,
-                decoration: _inputDecoration('Ej: Café Volcán 500g'),
+                focusNode: _nameFocus,
+                decoration: _inputDecoration('Ej: Café Volcán 500g').copyWith(
+                  suffixIcon: voiceMicIcon(_nameCtrl),
+                ),
                 validator: (v) => v!.isEmpty ? 'Requerido' : null,
               ),
               const SizedBox(height: 16),
@@ -146,8 +173,11 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
               _SectionLabel(text: 'Precio de Venta *'),
               TextFormField(
                 controller: _priceCtrl,
+                focusNode: _priceFocus,
                 keyboardType: TextInputType.number,
-                decoration: _inputDecoration('Ej: 25000'),
+                decoration: _inputDecoration('Ej: 25000').copyWith(
+                  suffixIcon: voiceMicIcon(_priceCtrl),
+                ),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Requerido';
                   if (double.tryParse(v) == null) return 'Número inválido';
@@ -159,16 +189,22 @@ class _RegisterProductScreenState extends State<RegisterProductScreen> {
               _SectionLabel(text: 'Precio de Compra (Costo)'),
               TextFormField(
                 controller: _costPriceCtrl,
+                focusNode: _costPriceFocus,
                 keyboardType: TextInputType.number,
-                decoration: _inputDecoration('Ej: 18000'),
+                decoration: _inputDecoration('Ej: 18000').copyWith(
+                  suffixIcon: voiceMicIcon(_costPriceCtrl),
+                ),
               ),
               const SizedBox(height: 16),
 
               _SectionLabel(text: 'Cantidad en Stock *'),
               TextFormField(
                 controller: _quantityCtrl,
+                focusNode: _quantityFocus,
                 keyboardType: TextInputType.number,
-                decoration: _inputDecoration('Ej: 10'),
+                decoration: _inputDecoration('Ej: 10').copyWith(
+                  suffixIcon: voiceMicIcon(_quantityCtrl),
+                ),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Requerido';
                   if (int.tryParse(v) == null) return 'Número inválido';

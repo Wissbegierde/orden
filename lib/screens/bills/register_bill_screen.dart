@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import '../../mixins/voice_form_mixin.dart';
 import '../../models/bill.dart';
 import '../../providers/bills_provider.dart';
 
@@ -12,12 +12,18 @@ class RegisterBillScreen extends StatefulWidget {
   State<RegisterBillScreen> createState() => _RegisterBillScreenState();
 }
 
-class _RegisterBillScreenState extends State<RegisterBillScreen> {
+class _RegisterBillScreenState extends State<RegisterBillScreen>
+    with VoiceFormMixin {
   final _formKey = GlobalKey<FormState>();
   final _descriptionCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _providerCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+
+  final _descriptionFocus = FocusNode();
+  final _amountFocus = FocusNode();
+  final _providerFocus = FocusNode();
+  final _notesFocus = FocusNode();
 
   BillCategory? _selectedCategory = BillCategory.servicios;
   String? _customCategory;
@@ -26,54 +32,24 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _paid = false;
 
-  final SpeechToText _speech = SpeechToText();
-  bool _speechAvailable = false;
-  bool _isListening = false;
-  TextEditingController? _activeField;
-
   // Constantes de validación
-  static const double MAX_AMOUNT = 1000000000; // 1 billón
+  static const double MAX_AMOUNT = 1000000000;
   static const int MAX_PROVIDER_LENGTH = 100;
   static const int MAX_NOTES_LENGTH = 500;
 
   @override
   void initState() {
     super.initState();
-    _initSpeech();
+    initVoiceForm(
+      controllers: [_descriptionCtrl, _amountCtrl, _providerCtrl, _notesCtrl],
+      focusNodes: [_descriptionFocus, _amountFocus, _providerFocus, _notesFocus],
+      isNumeric: [false, true, false, false],
+      onSave: _submit,
+      accentColor: const Color(0xFFEF4444),
+    );
     _amountCtrl.addListener(() => setState(() {}));
     _providerCtrl.addListener(() => setState(() {}));
     _notesCtrl.addListener(() => setState(() {}));
-  }
-
-  Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
-    setState(() {});
-  }
-
-  Future<void> _listen(TextEditingController field) async {
-    if (!_speechAvailable) return;
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }
-    setState(() {
-      _isListening = true;
-      _activeField = field;
-    });
-    try {
-      final result = await _speech.listen(
-        onResult: (result) {
-          field.text = result.recognizedWords;
-          setState(() {});
-        },
-      );
-      if (!result) {
-        setState(() => _isListening = false);
-      }
-    } catch (e) {
-      setState(() => _isListening = false);
-    }
   }
 
   Future<void> _selectDate() async {
@@ -89,33 +65,17 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
   }
 
   String? _validateAmount(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'El monto es obligatorio';
-    }
-
+    if (value == null || value.isEmpty) return 'El monto es obligatorio';
     final amount = double.tryParse(value);
-    if (amount == null) {
-      return 'El monto debe ser un número válido';
-    }
-
-    if (amount <= 0) {
-      return 'El monto debe ser mayor a 0';
-    }
-
-    if (amount > MAX_AMOUNT) {
-      return 'El monto supera el límite permitido';
-    }
-
+    if (amount == null) return 'El monto debe ser un número válido';
+    if (amount <= 0) return 'El monto debe ser mayor a 0';
+    if (amount > MAX_AMOUNT) return 'El monto supera el límite permitido';
     return null;
   }
 
   String? _validateDescription(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'La descripción es obligatoria';
-    }
-    if (value.length < 3) {
-      return 'La descripción debe tener al menos 3 caracteres';
-    }
+    if (value == null || value.isEmpty) return 'La descripción es obligatoria';
+    if (value.length < 3) return 'La descripción debe tener al menos 3 caracteres';
     return null;
   }
 
@@ -188,7 +148,6 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validar que hay una categoría seleccionada
     if (_selectedCategory == null && _customCategory == null) {
       ScaffoldMessenger.of(
         context,
@@ -231,10 +190,15 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
 
   @override
   void dispose() {
+    disposeVoiceForm();
     _descriptionCtrl.dispose();
     _amountCtrl.dispose();
     _providerCtrl.dispose();
     _notesCtrl.dispose();
+    _descriptionFocus.dispose();
+    _amountFocus.dispose();
+    _providerFocus.dispose();
+    _notesFocus.dispose();
     super.dispose();
   }
 
@@ -242,6 +206,7 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      floatingActionButton: buildVoiceFAB(),
       appBar: AppBar(
         backgroundColor: const Color(0xFFEF4444),
         foregroundColor: Colors.white,
@@ -256,6 +221,10 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Voice indicator
+                buildVoiceBanner(const Color(0xFFEF4444)),
+
+
                 // Category selector
                 const Text(
                   'Categoría',
@@ -345,22 +314,13 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
                 // Description
                 TextFormField(
                   controller: _descriptionCtrl,
+                  focusNode: _descriptionFocus,
                   decoration: InputDecoration(
                     labelText: 'Descripción del Gasto',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    suffixIcon: _speechAvailable
-                        ? IconButton(
-                            icon: Icon(
-                              _activeField == _descriptionCtrl && _isListening
-                                  ? Icons.mic
-                                  : Icons.mic_none,
-                              color: const Color(0xFFEF4444),
-                            ),
-                            onPressed: () => _listen(_descriptionCtrl),
-                          )
-                        : null,
+                    suffixIcon: voiceMicIcon(_descriptionCtrl),
                   ),
                   validator: _validateDescription,
                 ),
@@ -368,6 +328,7 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
                 // Amount
                 TextFormField(
                   controller: _amountCtrl,
+                  focusNode: _amountFocus,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -377,17 +338,7 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    suffixIcon: _speechAvailable
-                        ? IconButton(
-                            icon: Icon(
-                              _activeField == _amountCtrl && _isListening
-                                  ? Icons.mic
-                                  : Icons.mic_none,
-                              color: const Color(0xFFEF4444),
-                            ),
-                            onPressed: () => _listen(_amountCtrl),
-                          )
-                        : null,
+                    suffixIcon: voiceMicIcon(_amountCtrl),
                   ),
                   validator: _validateAmount,
                 ),
@@ -395,6 +346,7 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
                 // Provider name
                 TextFormField(
                   controller: _providerCtrl,
+                  focusNode: _providerFocus,
                   maxLength: MAX_PROVIDER_LENGTH,
                   decoration: InputDecoration(
                     labelText: 'Proveedor (Opcional)',
@@ -403,17 +355,7 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    suffixIcon: _speechAvailable
-                        ? IconButton(
-                            icon: Icon(
-                              _activeField == _providerCtrl && _isListening
-                                  ? Icons.mic
-                                  : Icons.mic_none,
-                              color: const Color(0xFFEF4444),
-                            ),
-                            onPressed: () => _listen(_providerCtrl),
-                          )
-                        : null,
+                    suffixIcon: voiceMicIcon(_providerCtrl),
                   ),
                   validator: _validateProvider,
                 ),
@@ -470,6 +412,7 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
                 // Notes
                 TextFormField(
                   controller: _notesCtrl,
+                  focusNode: _notesFocus,
                   maxLength: MAX_NOTES_LENGTH,
                   decoration: InputDecoration(
                     labelText: 'Notas (Opcional)',
@@ -478,17 +421,7 @@ class _RegisterBillScreenState extends State<RegisterBillScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    suffixIcon: _speechAvailable
-                        ? IconButton(
-                            icon: Icon(
-                              _activeField == _notesCtrl && _isListening
-                                  ? Icons.mic
-                                  : Icons.mic_none,
-                              color: const Color(0xFFEF4444),
-                            ),
-                            onPressed: () => _listen(_notesCtrl),
-                          )
-                        : null,
+                    suffixIcon: voiceMicIcon(_notesCtrl),
                   ),
                   maxLines: 3,
                   validator: _validateNotes,

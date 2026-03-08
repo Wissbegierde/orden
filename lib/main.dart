@@ -10,28 +10,36 @@ import 'screens/auth/login_screen.dart';
 import 'providers/shopping_provider.dart';
 import 'providers/bills_provider.dart';
 import 'providers/inventory_provider.dart';
+import 'services/voice_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await initializeDateFormatting('es', null);
-  runApp(const MyApp());
+
+  // Inicializar el controlador de voz global antes de la UI
+  final voiceController = VoiceController();
+  await voiceController.init();
+
+  runApp(MyApp(voiceController: voiceController));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final VoiceController voiceController;
+  const MyApp({super.key, required this.voiceController});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider.value(value: voiceController),
         ChangeNotifierProvider(create: (_) => BillsProvider()),
         ChangeNotifierProvider(create: (_) => IncomeProvider()),
         ChangeNotifierProvider(create: (_) => ShoppingProvider()),
         ChangeNotifierProvider(create: (_) => InventoryProvider()),
       ],
       child: MaterialApp(
-        title: 'Orden',
+        title: 'A la Orden Jefe',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4F46E5)),
@@ -42,6 +50,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});

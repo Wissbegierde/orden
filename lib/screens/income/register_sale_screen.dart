@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import '../../mixins/voice_form_mixin.dart';
 import '../../models/income_sale.dart';
 import '../../models/product.dart';
 import '../../providers/income_provider.dart';
@@ -13,64 +13,33 @@ class RegisterSaleScreen extends StatefulWidget {
   State<RegisterSaleScreen> createState() => _RegisterSaleScreenState();
 }
 
-class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
+class _RegisterSaleScreenState extends State<RegisterSaleScreen>
+    with VoiceFormMixin {
   final _formKey = GlobalKey<FormState>();
   final _qtyCtrl = TextEditingController();
   final _clientCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   final _initialPaymentCtrl = TextEditingController();
 
+  final _qtyFocus = FocusNode();
+  final _clientFocus = FocusNode();
+  final _notesFocus = FocusNode();
+
   Product? _selectedProduct;
   PaymentType _selectedType = PaymentType.efectivo;
   bool _hasInitialPayment = false;
 
-  final SpeechToText _speech = SpeechToText();
-  bool _speechAvailable = false;
-  bool _isListening = false;
-  TextEditingController? _activeField;
-
   @override
   void initState() {
     super.initState();
-    _initSpeech();
-    _qtyCtrl.addListener(() => setState(() {}));
-  }
-
-  Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
-    setState(() {});
-  }
-
-  Future<void> _listen(TextEditingController field) async {
-    if (!_speechAvailable) return;
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }
-    setState(() {
-      _isListening = true;
-      _activeField = field;
-    });
-    await _speech.listen(
-      onResult: (result) {
-        setState(() {
-          field.text = result.recognizedWords;
-          field.selection = TextSelection.fromPosition(
-            TextPosition(offset: field.text.length),
-          );
-        });
-      },
-      localeId: 'es_CO',
+    initVoiceForm(
+      controllers: [_qtyCtrl, _clientCtrl, _notesCtrl],
+      focusNodes: [_qtyFocus, _clientFocus, _notesFocus],
+      isNumeric: [true, false, false],
+      onSave: _save,
+      accentColor: const Color(0xFF10B981),
     );
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_isListening) {
-        _speech.stop();
-        setState(() {
-          _isListening = false;
-        });
-      }
-    });
+    _qtyCtrl.addListener(() => setState(() {}));
   }
 
   double get _currentTotal {
@@ -137,10 +106,14 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
 
   @override
   void dispose() {
+    disposeVoiceForm();
     _qtyCtrl.dispose();
     _clientCtrl.dispose();
     _notesCtrl.dispose();
     _initialPaymentCtrl.dispose();
+    _qtyFocus.dispose();
+    _clientFocus.dispose();
+    _notesFocus.dispose();
     super.dispose();
   }
 
@@ -154,6 +127,7 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      floatingActionButton: buildVoiceFAB(),
       appBar: AppBar(
         backgroundColor: const Color(0xFF10B981),
         foregroundColor: Colors.white,
@@ -176,46 +150,10 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_speechAvailable)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      margin: const EdgeInsets.only(bottom: 20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _isListening ? Icons.mic : Icons.mic_none,
-                            color: _isListening
-                                ? Colors.red
-                                : const Color(0xFF10B981),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isListening
-                                ? 'Escuchando... habla ahora'
-                                : 'Presiona 🎤 en cantidad/cliente para dictar',
-                            style: TextStyle(
-                              color: _isListening
-                                  ? Colors.red
-                                  : const Color(0xFF10B981),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  buildVoiceBanner(const Color(0xFF10B981)),
 
                   // Producto
+
                   _SectionLabel(text: 'Producto *'),
                   LayoutBuilder(
                     builder: (context, constraints) {
@@ -296,10 +234,11 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                   _SectionLabel(text: 'Cantidad *'),
                   _VoiceField(
                     controller: _qtyCtrl,
+                    focusNode: _qtyFocus,
                     hint: 'Ej: 2',
                     keyboardType: TextInputType.number,
-                    isListening: _isListening && _activeField == _qtyCtrl,
-                    onMic: _speechAvailable ? () => _listen(_qtyCtrl) : null,
+                    isListening: voiceListening && voiceActiveField == _qtyCtrl,
+                    onMic: voiceAvailable ? () => voiceListen(_qtyCtrl) : null,
                     validator: (v) {
                       if (v == null || v.isEmpty) {
                         return 'Ingresa la cantidad';
@@ -378,10 +317,11 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                     _SectionLabel(text: 'Cliente *'),
                     _VoiceField(
                       controller: _clientCtrl,
+                      focusNode: _clientFocus,
                       hint: 'Nombre del cliente (requerido en crédito)',
-                      isListening: _isListening && _activeField == _clientCtrl,
-                      onMic: _speechAvailable
-                          ? () => _listen(_clientCtrl)
+                      isListening: voiceListening && voiceActiveField == _clientCtrl,
+                      onMic: voiceAvailable
+                          ? () => voiceListen(_clientCtrl)
                           : null,
                       validator: (v) => (v == null || v.isEmpty)
                           ? 'Requerido en crédito'
@@ -490,10 +430,11 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                     _SectionLabel(text: 'Cliente (opcional)'),
                     _VoiceField(
                       controller: _clientCtrl,
+                      focusNode: _clientFocus,
                       hint: 'Nombre del cliente',
-                      isListening: _isListening && _activeField == _clientCtrl,
-                      onMic: _speechAvailable
-                          ? () => _listen(_clientCtrl)
+                      isListening: voiceListening && voiceActiveField == _clientCtrl,
+                      onMic: voiceAvailable
+                          ? () => voiceListen(_clientCtrl)
                           : null,
                     ),
                     const SizedBox(height: 16),
@@ -503,10 +444,11 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                   _SectionLabel(text: 'Notas (opcional)'),
                   _VoiceField(
                     controller: _notesCtrl,
+                    focusNode: _notesFocus,
                     hint: 'Detalles adicionales',
                     maxLines: 2,
-                    isListening: _isListening && _activeField == _notesCtrl,
-                    onMic: _speechAvailable ? () => _listen(_notesCtrl) : null,
+                    isListening: voiceListening && voiceActiveField == _notesCtrl,
+                    onMic: voiceAvailable ? () => voiceListen(_notesCtrl) : null,
                   ),
                   const SizedBox(height: 30),
 
@@ -571,6 +513,7 @@ class _SectionLabel extends StatelessWidget {
 
 class _VoiceField extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String hint;
   final int maxLines;
   final TextInputType keyboardType;
@@ -581,6 +524,7 @@ class _VoiceField extends StatelessWidget {
   const _VoiceField({
     required this.controller,
     required this.hint,
+    this.focusNode,
     this.maxLines = 1,
     this.keyboardType = TextInputType.text,
     this.isListening = false,
@@ -592,6 +536,7 @@ class _VoiceField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       maxLines: maxLines,
       keyboardType: keyboardType,
       validator: validator,

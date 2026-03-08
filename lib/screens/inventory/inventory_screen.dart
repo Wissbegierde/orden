@@ -3,10 +3,28 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/product.dart';
 import '../../providers/inventory_provider.dart';
+import '../../services/voice_command_service.dart';
+import '../../widgets/voice_overlay.dart';
 import 'register_product_screen.dart';
 
-class InventoryScreen extends StatelessWidget {
+class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
+
+  @override
+  State<InventoryScreen> createState() => _InventoryScreenState();
+}
+
+class _InventoryScreenState extends State<InventoryScreen> {
+  bool _handleVoiceCommand(String normalized) {
+    if (VoiceCommandService.matchesAny(normalized, VoiceCommandService.nuevoProductoAliases)) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterProductScreen()));
+      return true;
+    } else if (VoiceCommandService.matchesAny(normalized, VoiceCommandService.volverAliases)) {
+      Navigator.pop(context);
+      return true;
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +54,10 @@ class InventoryScreen extends StatelessWidget {
           );
         },
       ),
-      body: StreamBuilder<List<Product>>(
+      body: VoiceCommandOverlay(
+        accentColor: const Color(0xFF3B82F6),
+        onCommand: _handleVoiceCommand,
+        child: StreamBuilder<List<Product>>(
         stream: context.read<InventoryProvider>().stockStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -303,6 +324,7 @@ class InventoryScreen extends StatelessWidget {
             ],
           );
         },
+      ),
       ),
     );
   }

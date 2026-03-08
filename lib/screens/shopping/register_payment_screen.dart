@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../mixins/voice_form_mixin.dart';
 import '../../models/shopping.dart';
 import '../../providers/shopping_provider.dart';
 
@@ -13,61 +13,32 @@ class RegisterPaymentScreen extends StatefulWidget {
   State<RegisterPaymentScreen> createState() => _RegisterPaymentScreenState();
 }
 
-class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
+class _RegisterPaymentScreenState extends State<RegisterPaymentScreen>
+    with VoiceFormMixin {
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _amountFocus = FocusNode();
+  final _notesFocus = FocusNode();
 
   Shopping? _selectedShopping;
   String? _selectedShoppingId;
   double _selectedBalance = 0;
   DateTime _selectedDate = DateTime.now();
 
-  final SpeechToText _speech = SpeechToText();
-  bool _speechAvailable = false;
-  bool _isListening = false;
-  TextEditingController? _activeField;
-
   @override
   void initState() {
     super.initState();
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
-    setState(() {});
-  }
-
-  Future<void> _listen(TextEditingController field) async {
-    if (!_speechAvailable) return;
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }
-    setState(() {
-      _isListening = true;
-      _activeField = field;
-    });
-    await _speech.listen(
-      onResult: (result) {
-        setState(() {
-          field.text = result.recognizedWords;
-          field.selection = TextSelection.fromPosition(
-            TextPosition(offset: field.text.length),
-          );
-        });
-      },
-      localeId: 'es_CO',
+    initVoiceForm(
+      controllers: [_amountCtrl, _notesCtrl],
+      focusNodes: [_amountFocus, _notesFocus],
+      isNumeric: [true, false],
+      onSave: _submit,
+      accentColor: const Color(0xFFF2D51D),
     );
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_isListening) {
-        _speech.stop();
-        setState(() => _isListening = false);
-      }
-    });
   }
+
+
 
   Future<void> _selectDate() async {
     final date = await showDatePicker(
@@ -135,8 +106,11 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
 
   @override
   void dispose() {
+    disposeVoiceForm();
     _amountCtrl.dispose();
     _notesCtrl.dispose();
+    _amountFocus.dispose();
+    _notesFocus.dispose();
     super.dispose();
   }
 
@@ -334,6 +308,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      floatingActionButton: buildVoiceFAB(),
       appBar: AppBar(
         title: const Text('Registrar Pago a Proveedor'),
         backgroundColor: const Color(0xFFF2D51D),
@@ -347,45 +322,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_speechAvailable)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2D51D).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color:
-                          const Color(0xFFF2D51D).withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isListening ? Icons.mic : Icons.mic_none,
-                        color: _isListening
-                            ? Colors.red
-                            : const Color(0xFFF2D51D),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isListening
-                            ? 'Escuchando... habla ahora'
-                            : 'Presiona 🎤 en los campos para dictar',
-                        style: TextStyle(
-                          color: _isListening
-                              ? Colors.red
-                              : const Color(0xFF92700A),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              buildVoiceBanner(const Color(0xFFF2D51D)),
               const Text(
                 'Seleccionar Compra',
                 style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
@@ -400,6 +337,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
               const SizedBox(height: 10),
               TextFormField(
                 controller: _amountCtrl,
+                focusNode: _amountFocus,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
@@ -415,19 +353,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                       width: 2,
                     ),
                   ),
-                  suffixIcon: _speechAvailable
-                      ? IconButton(
-                          icon: Icon(
-                            _activeField == _amountCtrl && _isListening
-                                ? Icons.mic
-                                : Icons.mic_none,
-                            color: _activeField == _amountCtrl && _isListening
-                                ? Colors.red
-                                : const Color(0xFFF2D51D),
-                          ),
-                          onPressed: () => _listen(_amountCtrl),
-                        )
-                      : null,
+                  suffixIcon: voiceMicIcon(_amountCtrl),
                 ),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Ingrese el monto';
@@ -455,6 +381,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
               const SizedBox(height: 20),
               TextFormField(
                 controller: _notesCtrl,
+                focusNode: _notesFocus,
                 maxLines: 3,
                 decoration: InputDecoration(
                   labelText: 'Notas (Opcional)',
@@ -468,19 +395,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                       width: 2,
                     ),
                   ),
-                  suffixIcon: _speechAvailable
-                      ? IconButton(
-                          icon: Icon(
-                            _activeField == _notesCtrl && _isListening
-                                ? Icons.mic
-                                : Icons.mic_none,
-                            color: _activeField == _notesCtrl && _isListening
-                                ? Colors.red
-                                : const Color(0xFFF2D51D),
-                          ),
-                          onPressed: () => _listen(_notesCtrl),
-                        )
-                      : null,
+                  suffixIcon: voiceMicIcon(_notesCtrl),
                 ),
               ),
               const SizedBox(height: 25),

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
-
+import '../../mixins/voice_form_mixin.dart';
 import '../../models/bill.dart';
 import '../../providers/bills_provider.dart';
 
@@ -14,57 +13,30 @@ class RegisterBillPaymentScreen extends StatefulWidget {
       _RegisterBillPaymentScreenState();
 }
 
-class _RegisterBillPaymentScreenState extends State<RegisterBillPaymentScreen> {
+class _RegisterBillPaymentScreenState extends State<RegisterBillPaymentScreen>
+    with VoiceFormMixin {
   final _formKey = GlobalKey<FormState>();
 
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _amountFocus = FocusNode();
+  final _notesFocus = FocusNode();
 
   Bill? _selectedBill;
-  String? _selectedBillId; // ✅ Guardamos solo el ID
+  String? _selectedBillId;
 
   DateTime _selectedDate = DateTime.now();
-
-  final SpeechToText _speech = SpeechToText();
-  bool _speechAvailable = false;
-  bool _isListening = false;
-  TextEditingController? _activeField;
 
   @override
   void initState() {
     super.initState();
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
-    setState(() {});
-  }
-
-  Future<void> _listen(TextEditingController field) async {
-    if (!_speechAvailable) return;
-
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }
-
-    setState(() {
-      _isListening = true;
-      _activeField = field;
-    });
-
-    try {
-      await _speech.listen(
-        onResult: (result) {
-          field.text = result.recognizedWords;
-          setState(() {});
-        },
-      );
-    } catch (e) {
-      setState(() => _isListening = false);
-    }
+    initVoiceForm(
+      controllers: [_amountCtrl, _notesCtrl],
+      focusNodes: [_amountFocus, _notesFocus],
+      isNumeric: [true, false],
+      onSave: _submit,
+      accentColor: const Color(0xFF8B5CF6),
+    );
   }
 
   Future<void> _selectDate() async {
@@ -131,8 +103,11 @@ class _RegisterBillPaymentScreenState extends State<RegisterBillPaymentScreen> {
 
   @override
   void dispose() {
+    disposeVoiceForm();
     _amountCtrl.dispose();
     _notesCtrl.dispose();
+    _amountFocus.dispose();
+    _notesFocus.dispose();
     super.dispose();
   }
 
@@ -263,6 +238,7 @@ class _RegisterBillPaymentScreenState extends State<RegisterBillPaymentScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      floatingActionButton: buildVoiceFAB(),
       appBar: AppBar(
         title: const Text('Registrar Pago de Gasto'),
         backgroundColor: const Color(0xFF8B5CF6),
@@ -275,6 +251,7 @@ class _RegisterBillPaymentScreenState extends State<RegisterBillPaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              buildVoiceBanner(const Color(0xFF8B5CF6)),
               const Text(
                 'Seleccionar Gasto',
                 style: TextStyle(fontWeight: FontWeight.w600),
@@ -297,26 +274,15 @@ class _RegisterBillPaymentScreenState extends State<RegisterBillPaymentScreen> {
 
               TextFormField(
                 controller: _amountCtrl,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
+                focusNode: _amountFocus,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'Monto',
                   prefixText: '\$ ',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  suffixIcon: _speechAvailable
-                      ? IconButton(
-                          icon: Icon(
-                            _activeField == _amountCtrl && _isListening
-                                ? Icons.mic
-                                : Icons.mic_none,
-                            color: const Color(0xFF8B5CF6),
-                          ),
-                          onPressed: () => _listen(_amountCtrl),
-                        )
-                      : null,
+                  suffixIcon: voiceMicIcon(_amountCtrl),
                 ),
                 validator: (v) {
                   if (v == null || v.isEmpty) {
@@ -354,23 +320,14 @@ class _RegisterBillPaymentScreenState extends State<RegisterBillPaymentScreen> {
 
               TextFormField(
                 controller: _notesCtrl,
+                focusNode: _notesFocus,
                 maxLines: 3,
                 decoration: InputDecoration(
                   labelText: 'Notas (Opcional)',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  suffixIcon: _speechAvailable
-                      ? IconButton(
-                          icon: Icon(
-                            _activeField == _notesCtrl && _isListening
-                                ? Icons.mic
-                                : Icons.mic_none,
-                            color: const Color(0xFF8B5CF6),
-                          ),
-                          onPressed: () => _listen(_notesCtrl),
-                        )
-                      : null,
+                  suffixIcon: voiceMicIcon(_notesCtrl),
                 ),
               ),
 

@@ -8,12 +8,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:orden/services/voice_controller.dart';
 import 'package:orden/main.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    final vc = VoiceController();
+    await tester.pumpWidget(MyApp(voiceController: vc));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

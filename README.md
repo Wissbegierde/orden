@@ -16,7 +16,11 @@
 - **Juan Mena** — Desarrollador  
 - **Miguel Bolaño** — Desarrollador  
 - **Luis Suárez** — Desarrollador  
+## 🎥 Demo del Proyecto
 
+Puedes ver la demostración del funcionamiento de la aplicación en el siguiente enlace:
+
+[Ver video de demostración](https://drive.google.com/file/d/1Q7h3dAdIgh9bbB4leuEUnXF4qVjI_EzX/view?usp=drive_link)
 ## Actividades Clave
 
 ### Planeación del Proyecto

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../../models/expense.dart';
 import '../../providers/expense_provider.dart';
 
@@ -22,11 +23,51 @@ class _RegisterExpensePaymentScreenState
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
+  final SpeechToText _speech = SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+  TextEditingController? _activeField;
+
   final _currency =
       NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
 
   @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    _speechAvailable = await _speech.initialize();
+    setState(() {});
+  }
+
+  Future<void> _listen(TextEditingController field) async {
+    if (!_speechAvailable) return;
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+    setState(() {
+      _isListening = true;
+      _activeField = field;
+    });
+    await _speech.listen(
+      onResult: (result) {
+        field.text = result.recognizedWords;
+      },
+    );
+    await Future.delayed(const Duration(seconds: 4));
+    if (_isListening) {
+      _speech.stop();
+      setState(() => _isListening = false);
+    }
+  }
+
+  @override
   void dispose() {
+    _speech.stop();
     _amountController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -329,6 +370,19 @@ class _RegisterExpensePaymentScreenState
                         helperText:
                             'Máximo: ${_currency.format(_selectedExpense!.pendingAmount)}',
                         helperStyle: const TextStyle(color: Color(0xFFF59E0B)),
+                        suffixIcon: _speechAvailable
+                            ? IconButton(
+                                icon: Icon(
+                                  _activeField == _amountController && _isListening
+                                      ? Icons.mic
+                                      : Icons.mic_none,
+                                  color: _activeField == _amountController && _isListening
+                                      ? Colors.red
+                                      : Colors.grey,
+                                ),
+                                onPressed: () => _listen(_amountController),
+                              )
+                            : null,
                       ),
                       validator: (v) {
                         if (v == null || v.isEmpty) return 'El monto es obligatorio'; // TC-PAGO-04
@@ -363,17 +417,33 @@ class _RegisterExpensePaymentScreenState
                     // NOTAS
                     TextFormField(
                       controller: _notesController,
-                      maxLength: 500, // TC-PAGO-14
+                      maxLength: 500,
                       maxLines: 3,
                       keyboardType: TextInputType.multiline,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Notas del Abono (Opcional)',
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         alignLabelWithHint: true,
-                        prefixIcon: Padding(
+                        prefixIcon: const Padding(
                           padding: EdgeInsets.only(bottom: 40),
                           child: Icon(Icons.notes),
                         ),
+                        suffixIcon: _speechAvailable
+                            ? Padding(
+                                padding: const EdgeInsets.only(bottom: 40),
+                                child: IconButton(
+                                  icon: Icon(
+                                    _activeField == _notesController && _isListening
+                                        ? Icons.mic
+                                        : Icons.mic_none,
+                                    color: _activeField == _notesController && _isListening
+                                        ? Colors.red
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () => _listen(_notesController),
+                                ),
+                              )
+                            : null,
                       ),
                     ),
                     const SizedBox(height: 24),

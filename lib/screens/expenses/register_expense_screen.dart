@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../../models/expense.dart';
 import '../../models/expense_category.dart';
 import '../../providers/expense_provider.dart';
@@ -30,9 +31,15 @@ class _RegisterExpenseScreenState extends State<RegisterExpenseScreen> {
   bool _isLoading = false;
   List<ExpenseCategory> _loadedCategories = [];
 
+  final SpeechToText _speech = SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+  TextEditingController? _activeField;
+
   @override
   void initState() {
     super.initState();
+    _initSpeech();
     if (widget.expenseToEdit != null) {
       final e = widget.expenseToEdit!;
       _nameController.text = e.name ?? '';
@@ -44,8 +51,37 @@ class _RegisterExpenseScreenState extends State<RegisterExpenseScreen> {
     }
   }
 
+  Future<void> _initSpeech() async {
+    _speechAvailable = await _speech.initialize();
+    setState(() {});
+  }
+
+  Future<void> _listen(TextEditingController field) async {
+    if (!_speechAvailable) return;
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+    setState(() {
+      _isListening = true;
+      _activeField = field;
+    });
+    await _speech.listen(
+      onResult: (result) {
+        field.text = result.recognizedWords;
+      },
+    );
+    await Future.delayed(const Duration(seconds: 4));
+    if (_isListening) {
+      _speech.stop();
+      setState(() => _isListening = false);
+    }
+  }
+
   @override
   void dispose() {
+    _speech.stop();
     _nameController.dispose();
     _amountController.dispose();
     _providerController.dispose();
@@ -191,15 +227,28 @@ class _RegisterExpenseScreenState extends State<RegisterExpenseScreen> {
                           controller: _nameController,
                           maxLength: 150,
                           textCapitalization: TextCapitalization.sentences,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Nombre del Gasto *',
                             hintText: 'Ej: Pago de servicios públicos',
-                            prefixIcon: Icon(Icons.label_outline, color: Color(0xFFE11D48)),
-                            border: OutlineInputBorder(),
-                            focusedBorder: OutlineInputBorder(
+                            prefixIcon: const Icon(Icons.label_outline, color: Color(0xFFE11D48)),
+                            border: const OutlineInputBorder(),
+                            focusedBorder: const OutlineInputBorder(
                               borderSide: BorderSide(color: Color(0xFFE11D48), width: 2),
                             ),
                             counterText: '',
+                            suffixIcon: _speechAvailable
+                                ? IconButton(
+                                    icon: Icon(
+                                      _activeField == _nameController && _isListening
+                                          ? Icons.mic
+                                          : Icons.mic_none,
+                                      color: _activeField == _nameController && _isListening
+                                          ? Colors.red
+                                          : Colors.grey,
+                                    ),
+                                    onPressed: () => _listen(_nameController),
+                                  )
+                                : null,
                           ),
                           validator: (v) =>
                               (v == null || v.trim().isEmpty) ? 'El nombre es obligatorio' : null,
@@ -215,13 +264,26 @@ class _RegisterExpenseScreenState extends State<RegisterExpenseScreen> {
                             LengthLimitingTextInputFormatter(10),
                           ],
                           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Monto *',
-                            prefixIcon: Icon(Icons.attach_money, color: Color(0xFFE11D48)),
-                            border: OutlineInputBorder(),
-                            focusedBorder: OutlineInputBorder(
+                            prefixIcon: const Icon(Icons.attach_money, color: Color(0xFFE11D48)),
+                            border: const OutlineInputBorder(),
+                            focusedBorder: const OutlineInputBorder(
                               borderSide: BorderSide(color: Color(0xFFE11D48), width: 2),
                             ),
+                            suffixIcon: _speechAvailable
+                                ? IconButton(
+                                    icon: Icon(
+                                      _activeField == _amountController && _isListening
+                                          ? Icons.mic
+                                          : Icons.mic_none,
+                                      color: _activeField == _amountController && _isListening
+                                          ? Colors.red
+                                          : Colors.grey,
+                                    ),
+                                    onPressed: () => _listen(_amountController),
+                                  )
+                                : null,
                           ),
                           validator: (v) {
                             if (v == null || v.isEmpty) return 'El monto es obligatorio';
@@ -323,12 +385,25 @@ class _RegisterExpenseScreenState extends State<RegisterExpenseScreen> {
                           controller: _providerController,
                           maxLength: 150,
                           textCapitalization: TextCapitalization.sentences,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Proveedor (Opcional)',
                             hintText: 'A quién se le paga',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.storefront_outlined),
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.storefront_outlined),
                             counterText: '',
+                            suffixIcon: _speechAvailable
+                                ? IconButton(
+                                    icon: Icon(
+                                      _activeField == _providerController && _isListening
+                                          ? Icons.mic
+                                          : Icons.mic_none,
+                                      color: _activeField == _providerController && _isListening
+                                          ? Colors.red
+                                          : Colors.grey,
+                                    ),
+                                    onPressed: () => _listen(_providerController),
+                                  )
+                                : null,
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -341,14 +416,30 @@ class _RegisterExpenseScreenState extends State<RegisterExpenseScreen> {
                           minLines: 3,
                           keyboardType: TextInputType.multiline,
                           textCapitalization: TextCapitalization.sentences,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Descripción / Notas (Opcional)',
                             alignLabelWithHint: true,
-                            border: OutlineInputBorder(),
-                            prefixIcon: Padding(
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Padding(
                               padding: EdgeInsets.only(bottom: 60),
                               child: Icon(Icons.description_outlined),
                             ),
+                            suffixIcon: _speechAvailable
+                                ? Padding(
+                                    padding: const EdgeInsets.only(bottom: 60),
+                                    child: IconButton(
+                                      icon: Icon(
+                                        _activeField == _notesController && _isListening
+                                            ? Icons.mic
+                                            : Icons.mic_none,
+                                        color: _activeField == _notesController && _isListening
+                                            ? Colors.red
+                                            : Colors.grey,
+                                      ),
+                                      onPressed: () => _listen(_notesController),
+                                    ),
+                                  )
+                                : null,
                           ),
                         ),
                         const SizedBox(height: 24),

@@ -41,9 +41,12 @@ class IncomeProvider extends ChangeNotifier {
         .collection('ventas')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .where('date', isLessThan: Timestamp.fromDate(end))
-        .orderBy('date', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map(IncomeSale.fromFirestore).toList());
+        .map((snap) {
+          final list = snap.docs.map(IncomeSale.fromFirestore).toList()
+            ..sort((a, b) => b.date.compareTo(a.date));
+          return list;
+        });
   }
 
   Future<void> addSale(IncomeSale sale) async {
@@ -99,9 +102,12 @@ class IncomeProvider extends ChangeNotifier {
         .collection('abonos')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .where('date', isLessThan: Timestamp.fromDate(end))
-        .orderBy('date', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map(IncomePayment.fromFirestore).toList());
+        .map((snap) {
+          final list = snap.docs.map(IncomePayment.fromFirestore).toList()
+            ..sort((a, b) => b.date.compareTo(a.date));
+          return list;
+        });
   }
 
   Future<void> addPayment(IncomePayment payment) async {
@@ -191,9 +197,10 @@ class IncomeProvider extends ChangeNotifier {
         .collection('ventas')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
         .where('date', isLessThan: Timestamp.fromDate(to))
-        .orderBy('date')
         .get();
-    return snap.docs.map(IncomeSale.fromFirestore).toList();
+    final list = snap.docs.map(IncomeSale.fromFirestore).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return list;
   }
 
   Future<List<IncomePayment>> fetchPaymentsForRange(
@@ -204,8 +211,9 @@ class IncomeProvider extends ChangeNotifier {
         .collection('abonos')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
         .where('date', isLessThan: Timestamp.fromDate(to))
-        .orderBy('date')
         .get();
-    return snap.docs.map(IncomePayment.fromFirestore).toList();
+    final list = snap.docs.map(IncomePayment.fromFirestore).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return list;
   }
 }

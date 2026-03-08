@@ -405,38 +405,68 @@ class _BillsReportsScreenState extends State<BillsReportsScreen>
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Column(
-                children: sortedCategories
-                    .map(
-                      (catKey) => Column(
-                        children: [
-                          _CategoryBreakdown(
-                            categoryLabel: _getCategoryLabel(catKey),
-                            amount: byCategory[catKey] ?? 0,
-                            color: _getCategoryColor(catKey),
-                            total: totalGastos,
-                          ),
-                          if (catKey != sortedCategories.last)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Divider(
-                                height: 1,
-                                color: Colors.grey.shade200,
-                              ),
-                            ),
-                        ],
+            if (sortedCategories.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.receipt_long_outlined,
+                      size: 48,
+                      color: Colors.grey.shade300,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No hay gastos en este período',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 14,
                       ),
-                    )
-                    .toList(),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: sortedCategories
+                      .map(
+                        (catKey) => Column(
+                          children: [
+                            _CategoryBreakdown(
+                              categoryLabel: _getCategoryLabel(catKey),
+                              amount: byCategory[catKey] ?? 0,
+                              color: _getCategoryColor(catKey),
+                              total: totalGastos,
+                            ),
+                            if (catKey != sortedCategories.last)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                child: Divider(
+                                  height: 1,
+                                  color: Colors.grey.shade200,
+                                ),
+                              ),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
-            ),
           ],
         ),
       ),
